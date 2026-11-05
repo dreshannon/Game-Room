@@ -55,10 +55,14 @@ async function copyLink() {
 }
 
 const sendMove = (move: unknown) => send({ type: 'move', move })
+
+function endGame() {
+  if (window.confirm('End this game for everyone?')) send({ type: 'endGame' })
+}
 </script>
 
 <template>
-  <main class="page room">
+  <main class="page room" :class="{ 'in-game': state?.game }">
     <section v-if="closedReason" class="panel center">
       <h1>Room closed</h1>
       <p>{{ CLOSED_MESSAGES[closedReason] }}</p>
@@ -120,6 +124,7 @@ const sendMove = (move: unknown) => send({ type: 'move', move })
               </div>
               <p v-else class="muted">Waiting for the host…</p>
             </div>
+            <button v-else-if="isHost" class="end-game" @click="endGame">End game</button>
           </template>
 
           <template v-else>
@@ -136,6 +141,27 @@ const sendMove = (move: unknown) => send({ type: 'move', move })
               </select>
             </label>
             <p v-else>Next up: <strong>{{ selectedGame?.name }}</strong></p>
+
+            <template v-for="option in selectedGame?.options ?? []" :key="option.key">
+              <label v-if="isHost" class="field">
+                {{ option.label }}
+                <input
+                  type="number"
+                  class="option-input"
+                  :min="option.min"
+                  :max="option.max"
+                  :value="state.options[option.key]"
+                  @change="
+                    send({
+                      type: 'setOption',
+                      key: option.key,
+                      value: ($event.target as HTMLInputElement).valueAsNumber,
+                    })
+                  "
+                />
+              </label>
+              <p v-else>{{ option.label }}: <strong>{{ state.options[option.key] }}</strong></p>
+            </template>
 
             <template v-if="selectedGame">
               <button
@@ -242,6 +268,29 @@ const sendMove = (move: unknown) => send({ type: 'move', move })
   display: grid;
   gap: 0.35rem;
   font-weight: 600;
+}
+
+.option-input {
+  width: 7rem;
+}
+
+.end-game {
+  justify-self: end;
+}
+
+/* Games get the full width, and the player list moves underneath. */
+.in-game {
+  max-width: 84rem;
+}
+
+.in-game .layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.in-game .players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
 }
 
 .result {

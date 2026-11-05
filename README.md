@@ -7,6 +7,7 @@ Built with Vue, Vite, and Cloudflare Durable Objects, with one object per room h
 ## Commands
 
 - `npm run dev`: run the site and room server locally
+- `npm test`: run the game rules tests
 - `npm run typecheck`: check types
 - `npm run deploy`: build and deploy (run `npx wrangler login` first)
 

@@ -1,4 +1,5 @@
 import type { Component } from 'vue'
+import ColorClues from './ColorClues.vue'
 import TicTacToe from './TicTacToe.vue'
 
 /**
@@ -6,5 +7,6 @@ import TicTacToe from './TicTacToe.vue'
  * and emit `move` with whatever the game's applyMove expects.
  */
 export const gameViews: Record<string, Component> = {
+  'color-clues': ColorClues,
   'tic-tac-toe': TicTacToe,
 }

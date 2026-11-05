@@ -1,5 +1,5 @@
 import { Server, type Connection, type WSMessage } from 'partyserver'
-import { games, getGame } from '../games'
+import { defaultOptions, games, getGame } from '../games'
 import { MoveError } from '../games/types'
 import {
   MAX_NAME_LENGTH,
@@ -42,6 +42,7 @@ export class Room extends Server<Env> {
   private rates = new Map<string, { windowStart: number; count: number }>()
   private hostId: string | null = null
   private selectedGameId = games[0]!.id
+  private gameOptions = defaultOptions(games[0]!)
   private game: ActiveGameRecord | null = null
   private emptyTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -97,6 +98,8 @@ export class Room extends Server<Env> {
     switch (message.type) {
       case 'selectGame':
         return this.handleSelectGame(connection, player, message.gameId)
+      case 'setOption':
+        return this.handleSetOption(connection, player, message.key, message.value)
       case 'start':
         return this.handleStart(connection, player)
       case 'move':
@@ -158,11 +161,31 @@ export class Room extends Server<Env> {
   private handleSelectGame(connection: Connection, player: Player, gameId: unknown) {
     if (player.id !== this.hostId) return this.sendError(connection, 'Only the host can do that.')
     if (this.isGameInProgress()) return this.sendError(connection, 'Finish this game first.')
-    if (typeof gameId !== 'string' || !getGame(gameId)) {
-      return this.sendError(connection, 'That game does not exist.')
-    }
-    this.selectedGameId = gameId
+    const definition = typeof gameId === 'string' ? getGame(gameId) : undefined
+    if (!definition) return this.sendError(connection, 'That game does not exist.')
+    this.selectedGameId = definition.id
+    this.gameOptions = defaultOptions(definition)
     this.game = null
+    this.broadcastState()
+  }
+
+  private handleSetOption(connection: Connection, player: Player, key: unknown, value: unknown) {
+    if (player.id !== this.hostId) return this.sendError(connection, 'Only the host can do that.')
+    if (this.isGameInProgress()) return this.sendError(connection, 'Finish this game first.')
+
+    const option = getGame(this.selectedGameId)!.options?.find((candidate) => candidate.key === key)
+    if (!option) return this.sendError(connection, 'That setting does not exist.')
+    if (
+      typeof value !== 'number' ||
+      !Number.isInteger(value) ||
+      value < option.min ||
+      value > option.max
+    ) {
+      this.sendError(connection, `${option.label} must be from ${option.min} to ${option.max}.`)
+      // Puts the host's input back to the value that's actually in effect.
+      return this.sendState(connection)
+    }
+    this.gameOptions = { ...this.gameOptions, [option.key]: value }
     this.broadcastState()
   }
 
@@ -178,7 +201,11 @@ export class Room extends Server<Env> {
       return this.sendError(connection, `${definition.name} needs ${playersNeeded(definition)}.`)
     }
 
-    this.game = { gameId: definition.id, playerIds, state: definition.setup(playerIds) }
+    this.game = {
+      gameId: definition.id,
+      playerIds,
+      state: definition.setup(playerIds, this.gameOptions),
+    }
     this.broadcastState()
   }
 
@@ -209,8 +236,16 @@ export class Room extends Server<Env> {
     this.players.delete(playerId)
 
     if (this.game?.playerIds.includes(playerId) && this.isGameInProgress()) {
-      this.game = null
-      this.broadcast(serialize({ type: 'notice', message: `${player.name} left, so the game ended.` }))
+      const definition = getGame(this.game.gameId)!
+      const nextState = definition.onPlayerLeave?.(this.game.state, playerId) ?? null
+      if (nextState === null) {
+        this.game = null
+        this.broadcast(serialize({ type: 'notice', message: `${player.name} left, so the game ended.` }))
+      } else {
+        this.game.state = nextState
+        this.game.playerIds = this.game.playerIds.filter((id) => id !== playerId)
+        this.broadcast(serialize({ type: 'notice', message: `${player.name} left the game.` }))
+      }
     }
     if (this.hostId === playerId) {
       const seats = [...this.players.values()]
@@ -232,6 +267,7 @@ export class Room extends Server<Env> {
       you: viewerId,
       hostId: this.hostId,
       selectedGameId: this.selectedGameId,
+      options: this.gameOptions,
       players: [...this.players.values()].map(({ id, name, connectionId }) => ({
         id,
         name,
@@ -310,6 +346,7 @@ export class Room extends Server<Env> {
     this.hostId = null
     this.game = null
     this.selectedGameId = games[0]!.id
+    this.gameOptions = defaultOptions(games[0]!)
     this.emptyTimer = null
   }
 }

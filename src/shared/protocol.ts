@@ -1,4 +1,4 @@
-import type { GameResult } from '../games/types'
+import type { GameOptionValues, GameResult } from '../games/types'
 
 export const ROOM_CODE_LENGTH = 5
 export const MAX_NAME_LENGTH = 20
@@ -6,6 +6,7 @@ export const MAX_NAME_LENGTH = 20
 export type ClientMessage =
   | { type: 'join'; name: string; token: string }
   | { type: 'selectGame'; gameId: string }
+  | { type: 'setOption'; key: string; value: number }
   | { type: 'start' }
   | { type: 'move'; move: unknown }
   | { type: 'endGame' }
@@ -31,6 +32,7 @@ export interface RoomState {
   hostId: string | null
   players: PublicPlayer[]
   selectedGameId: string
+  options: GameOptionValues
   game: ActiveGame | null
 }
 

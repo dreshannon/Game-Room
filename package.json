@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "vue-tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.worker.json --noEmit",
-    "deploy": "vite build && wrangler deploy"
+    "deploy": "vite build && wrangler deploy",
+    "test": "vitest run"
   },
   "dependencies": {
     "partyserver": "^0.5.10",
@@ -21,6 +22,7 @@
     "@vitejs/plugin-vue": "^6.0.10",
     "typescript": "~5.9",
     "vite": "^8.3.5",
+    "vitest": "^5.1.0",
     "vue-tsc": "^3.3.14",
     "wrangler": "^4.157.0"
   }
