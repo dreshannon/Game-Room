@@ -58,7 +58,7 @@ const status = computed(() => {
     return isGiver.value ? 'Choose a color and give a one-word clue' : `${giver} is thinking of a clue`
   }
   if (phase === 'secondClue') {
-    return isGiver.value ? 'Now give a two-word clue' : `${giver} is thinking of a second clue`
+    return isGiver.value ? 'Now give a second clue of one or two words' : `${giver} is thinking of a second clue`
   }
   if (phase === 'reveal') return 'Here’s the answer'
   if (isGiver.value) return `${nameOf(turnPlayerId ?? '')} is guessing`
@@ -177,8 +177,8 @@ watch(tokenByCell, (tokens) => {
           class="clue-input"
           maxlength="60"
           autocomplete="off"
-          :aria-label="view.phase === 'firstClue' ? 'One-word clue' : 'Two-word clue'"
-          :placeholder="view.phase === 'firstClue' ? 'One-word clue' : 'Two-word clue'"
+          :aria-label="view.phase === 'firstClue' ? 'One-word clue' : 'Second clue, one or two words'"
+          :placeholder="view.phase === 'firstClue' ? 'One-word clue' : 'One or two words'"
         />
         <button
           class="primary"

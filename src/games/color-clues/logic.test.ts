@@ -134,9 +134,16 @@ describe('clues', () => {
     ).toThrow(MoveError)
   })
 
-  it.each(['', 'one', 'one two three'])('rejects %j as a two-word clue', (words) => {
+  it.each(['', '   ', 'one two three'])('rejects %j as a second clue', (words) => {
     const state = place(place(firstClue(setup()), 'b', 0), 'c', 1)
     expect(() => colorClues.applyMove(state, 'a', { type: 'secondClue', words })).toThrow(MoveError)
+  })
+
+  it.each(['stormy', 'stormy sky'])('accepts %j as a second clue', (words) => {
+    const state = place(place(firstClue(setup()), 'b', 0), 'c', 1)
+    const next = colorClues.applyMove(state, 'a', { type: 'secondClue', words })
+    expect(next.secondClue).toBe(words)
+    expect(next.phase).toBe('secondGuess')
   })
 
   it('only accepts clues from the clue-giver', () => {

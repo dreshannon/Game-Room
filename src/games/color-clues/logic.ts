@@ -143,9 +143,11 @@ function requireGiver(state: ColorCluesState, playerId: string, phase: Phase) {
 const splitWords = (text: unknown) =>
   typeof text === 'string' ? text.trim().split(/\s+/).filter(Boolean) : []
 
-function validateWords(words: string[], count: number) {
-  const noun = count === 1 ? 'exactly one word' : `exactly ${count} words`
-  if (words.length !== count) throw new MoveError(`The clue must be ${noun}.`)
+function validateWords(words: string[], maxWords: number) {
+  if (words.length === 0 || words.length > maxWords) {
+    const allowed = maxWords === 1 ? 'exactly one word' : `1 to ${maxWords} words`
+    throw new MoveError(`The clue must be ${allowed}.`)
+  }
   if (words.some((word) => word.length > MAX_WORD_LENGTH)) {
     throw new MoveError(`Each word can be up to ${MAX_WORD_LENGTH} letters.`)
   }

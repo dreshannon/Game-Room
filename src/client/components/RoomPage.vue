@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { games, getGame } from '../../games'
-import { MAX_NAME_LENGTH, type ClosedReason } from '../../shared/protocol'
+import { MAX_NAME_LENGTH, type ClosedReason, type PublicPlayer } from '../../shared/protocol'
 import { gameViews } from '../games'
 import { useRoom } from '../useRoom'
 
@@ -17,6 +17,7 @@ const CLOSED_MESSAGES: Record<ClosedReason, string> = {
   full: 'This room has too many people connected.',
   replaced: 'You opened this room in another tab.',
   left: 'You left the room.',
+  removed: 'The host removed you from the room. You’re welcome to rejoin.',
 }
 
 const isHost = computed(() => !!state.value?.you && state.value.you === state.value.hostId)
@@ -56,6 +57,12 @@ async function copyLink() {
 
 const sendMove = (move: unknown) => send({ type: 'move', move })
 
+function removePlayer(player: PublicPlayer) {
+  if (window.confirm(`Remove ${player.name} from the room? They can rejoin with the link.`)) {
+    send({ type: 'removePlayer', playerId: player.id })
+  }
+}
+
 function endGame() {
   if (window.confirm('End this game for everyone?')) send({ type: 'endGame' })
 }
@@ -64,9 +71,12 @@ function endGame() {
 <template>
   <main class="page room" :class="{ 'in-game': state?.game }">
     <section v-if="closedReason" class="panel center">
-      <h1>Room closed</h1>
+      <h1>{{ closedReason === 'removed' ? 'You were removed' : 'Room closed' }}</h1>
       <p>{{ CLOSED_MESSAGES[closedReason] }}</p>
-      <a class="button primary" href="/">Back to home</a>
+      <div class="closed-actions">
+        <a v-if="closedReason === 'removed'" class="button primary" :href="`/room/${code}`">Rejoin</a>
+        <a class="button" :class="{ primary: closedReason !== 'removed' }" href="/">Back to home</a>
+      </div>
     </section>
 
     <p v-else-if="!state" class="center muted">Connecting…</p>
@@ -196,6 +206,14 @@ function endGame() {
               <span v-if="player.id === state.you" class="tag">you</span>
               <span v-if="player.id === state.hostId" class="tag">host</span>
               <span v-if="!player.connected" class="tag">away</span>
+              <button
+                v-if="isHost && player.id !== state.you"
+                class="remove-player"
+                :aria-label="`Remove ${player.name}`"
+                @click="removePlayer(player)"
+              >
+                Remove
+              </button>
             </li>
           </ul>
         </aside>
@@ -224,7 +242,11 @@ function endGame() {
   min-width: 0;
 }
 
-.center .button {
+.closed-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
   margin-top: 1rem;
 }
 
@@ -325,8 +347,13 @@ function endGame() {
   overflow-wrap: anywhere;
 }
 
-.away {
+.away .player-name {
   opacity: 0.55;
+}
+
+.remove-player {
+  padding: 0.1rem 0.5rem;
+  font-size: 0.75rem;
 }
 
 .tag {

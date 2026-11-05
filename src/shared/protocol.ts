@@ -10,6 +10,7 @@ export type ClientMessage =
   | { type: 'start' }
   | { type: 'move'; move: unknown }
   | { type: 'endGame' }
+  | { type: 'removePlayer'; playerId: string }
   | { type: 'leave' }
 
 export interface PublicPlayer {
@@ -36,7 +37,7 @@ export interface RoomState {
   game: ActiveGame | null
 }
 
-export type ClosedReason = 'not_found' | 'full' | 'replaced' | 'left'
+export type ClosedReason = 'not_found' | 'full' | 'replaced' | 'left' | 'removed'
 
 export type ServerMessage =
   | { type: 'state'; state: RoomState }

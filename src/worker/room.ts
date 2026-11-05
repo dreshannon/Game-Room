@@ -106,6 +106,8 @@ export class Room extends Server<Env> {
         return this.handleMove(connection, player, message.move)
       case 'endGame':
         return this.handleEndGame(connection, player)
+      case 'removePlayer':
+        return this.handleRemovePlayer(connection, player, message.playerId)
       case 'leave':
         this.send(connection, { type: 'closed', reason: 'left' })
         return this.removePlayer(player.id)
@@ -228,7 +230,19 @@ export class Room extends Server<Env> {
     this.broadcastState()
   }
 
-  private removePlayer(playerId: string) {
+  private handleRemovePlayer(connection: Connection, host: Player, playerId: unknown) {
+    if (host.id !== this.hostId) return this.sendError(connection, 'Only the host can do that.')
+    if (playerId === host.id) return this.sendError(connection, 'Use Leave to leave the room.')
+    const target = typeof playerId === 'string' ? this.players.get(playerId) : undefined
+    // They may have just left by themselves, in which case there's nothing to do.
+    if (!target) return
+
+    const targetConnection = target.connectionId ? this.getConnection(target.connectionId) : undefined
+    if (targetConnection) this.reject(targetConnection, 'removed')
+    this.removePlayer(target.id, 'was removed')
+  }
+
+  private removePlayer(playerId: string, departure = 'left') {
     const player = this.players.get(playerId)
     if (!player) return
     if (player.expiry) clearTimeout(player.expiry)
@@ -240,11 +254,13 @@ export class Room extends Server<Env> {
       const nextState = definition.onPlayerLeave?.(this.game.state, playerId) ?? null
       if (nextState === null) {
         this.game = null
-        this.broadcast(serialize({ type: 'notice', message: `${player.name} left, so the game ended.` }))
+        this.broadcast(
+          serialize({ type: 'notice', message: `${player.name} ${departure}, so the game ended.` }),
+        )
       } else {
         this.game.state = nextState
         this.game.playerIds = this.game.playerIds.filter((id) => id !== playerId)
-        this.broadcast(serialize({ type: 'notice', message: `${player.name} left the game.` }))
+        this.broadcast(serialize({ type: 'notice', message: `${player.name} ${departure}.` }))
       }
     }
     if (this.hostId === playerId) {
