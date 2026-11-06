@@ -15,9 +15,26 @@ export interface GameOption {
   min: number
   max: number
   default: number
+  /** Shows a dropdown of named values instead of a number box. */
+  choices?: { value: number; label: string }[]
+  /** Only shown, and only matters, when another setting has this value. */
+  showWhen?: { key: string; value: number }
 }
 
 export type GameOptionValues = Record<string, number>
+
+/** Teams picked in the lobby, for games that use them. */
+export interface TeamSettings {
+  names: string[]
+  minPerTeam: number
+  /** Whether the current settings call for teams. */
+  when(options: GameOptionValues): boolean
+}
+
+export interface SetupContext {
+  /** Each player's team number, when the game is played in teams. */
+  teams: Record<string, number>
+}
 
 /**
  * A game is pure rules with no networking. To add one, implement this interface,
@@ -29,7 +46,8 @@ export interface Game<State = unknown, View = unknown> {
   minPlayers: number
   maxPlayers: number
   options?: GameOption[]
-  setup(playerIds: string[], options: GameOptionValues): State
+  teams?: TeamSettings
+  setup(playerIds: string[], options: GameOptionValues, context?: SetupContext): State
   /** `move` comes straight from the client, so it must be validated. */
   applyMove(state: State, playerId: string, move: unknown): State
   /** What one viewer may see. `viewerId` is null for anyone not yet in the room. */
@@ -43,3 +61,6 @@ export interface Game<State = unknown, View = unknown> {
    */
   onPlayerLeave?(state: State, playerId: string): State | null
 }
+
+export const optionIsShown = (option: GameOption, values: GameOptionValues) =>
+  !option.showWhen || values[option.showWhen.key] === option.showWhen.value

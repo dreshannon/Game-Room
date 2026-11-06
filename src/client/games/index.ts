@@ -1,5 +1,7 @@
 import type { Component } from 'vue'
 import ColorClues from './ColorClues.vue'
+import DialIn from './DialIn.vue'
+import DialInRules from './rules/DialInRules.vue'
 import LuckyStreak from './LuckyStreak.vue'
 import LuckyStreakRevengeRules from './rules/LuckyStreakRevengeRules.vue'
 import LuckyStreakRules from './rules/LuckyStreakRules.vue'
@@ -21,5 +23,6 @@ export const gameViews: Record<string, GameView> = {
   'lucky-streak': { component: LuckyStreak, rules: LuckyStreakRules },
   'lucky-streak-revenge': { component: LuckyStreak, rules: LuckyStreakRevengeRules },
   'tier-talk': { component: TierTalk, rules: TierTalkRules },
+  'dial-in': { component: DialIn, rules: DialInRules },
   'tic-tac-toe': { component: TicTacToe, rules: TicTacToeRules },
 }

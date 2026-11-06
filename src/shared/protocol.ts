@@ -8,6 +8,8 @@ export type ClientMessage =
   | { type: 'rename'; name: string }
   | { type: 'selectGame'; gameId: string }
   | { type: 'setOption'; key: string; value: number }
+  | { type: 'setTeam'; team: number }
+  | { type: 'shuffleTeams' }
   | { type: 'start' }
   | { type: 'move'; move: unknown }
   | { type: 'endGame' }
@@ -18,6 +20,8 @@ export interface PublicPlayer {
   id: string
   name: string
   connected: boolean
+  /** The lobby team they picked, for team games. Null until they pick or are placed. */
+  team: number | null
 }
 
 export interface ActiveGame {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { games, getGame } from '../../games'
+import { optionIsShown, type GameOption } from '../../games/types'
 import { MAX_NAME_LENGTH, type ClosedReason, type PublicPlayer } from '../../shared/protocol'
 import { gameViews } from '../games'
 import { useRoom } from '../useRoom'
@@ -27,6 +28,25 @@ const CLOSED_MESSAGES: Record<ClosedReason, string> = {
 
 const isHost = computed(() => !!state.value?.you && state.value.you === state.value.hostId)
 const selectedGame = computed(() => getGame(state.value?.selectedGameId ?? ''))
+
+const shownOptions = computed(() =>
+  (selectedGame.value?.options ?? []).filter((option) => optionIsShown(option, state.value?.options ?? {})),
+)
+const optionLabel = (option: GameOption, value: number | undefined) =>
+  option.choices?.find((choice) => choice.value === value)?.label ?? value
+
+const teamSettings = computed(() => {
+  const settings = selectedGame.value?.teams
+  return settings && state.value && settings.when(state.value.options) ? settings : null
+})
+const teamMembers = (team: number) => state.value?.players.filter((player) => player.team === team) ?? []
+const unassigned = computed(() => {
+  const count = teamSettings.value?.names.length ?? 0
+  return (state.value?.players ?? []).filter((player) => player.team === null || player.team >= count)
+})
+const yourLobbyTeam = computed(
+  () => state.value?.players.find((player) => player.id === state.value?.you)?.team ?? null,
+)
 const connectedCount = computed(() => state.value?.players.filter((p) => p.connected).length ?? 0)
 const canStart = computed(() => {
   const game = selectedGame.value
@@ -187,10 +207,26 @@ function endGame() {
             </label>
             <p v-else>Next up: <strong>{{ selectedGame?.name }}</strong></p>
 
-            <template v-for="option in selectedGame?.options ?? []" :key="option.key">
+            <template v-for="option in shownOptions" :key="option.key">
               <label v-if="isHost" class="field">
                 {{ option.label }}
+                <select
+                  v-if="option.choices"
+                  :value="state.options[option.key]"
+                  @change="
+                    send({
+                      type: 'setOption',
+                      key: option.key,
+                      value: Number(($event.target as HTMLSelectElement).value),
+                    })
+                  "
+                >
+                  <option v-for="choice in option.choices" :key="choice.value" :value="choice.value">
+                    {{ choice.label }}
+                  </option>
+                </select>
                 <input
+                  v-else
                   type="number"
                   class="option-input"
                   :min="option.min"
@@ -205,8 +241,41 @@ function endGame() {
                   "
                 />
               </label>
-              <p v-else>{{ option.label }}: <strong>{{ state.options[option.key] }}</strong></p>
+              <p v-else>
+                {{ option.label }}:
+                <strong>{{ optionLabel(option, state.options[option.key]) }}</strong>
+              </p>
             </template>
+
+            <div v-if="teamSettings" class="team-picker">
+              <div
+                v-for="(teamName, team) in teamSettings.names"
+                :key="teamName"
+                class="team-column"
+                :class="`team-${team}`"
+              >
+                <h3>Team {{ teamName }}</h3>
+                <ul>
+                  <li v-for="player in teamMembers(team)" :key="player.id">
+                    {{ player.name }}<template v-if="player.id === state.you"> (you)</template>
+                  </li>
+                </ul>
+                <button
+                  v-if="yourLobbyTeam !== team"
+                  class="small-button"
+                  @click="send({ type: 'setTeam', team })"
+                >
+                  Join Team {{ teamName }}
+                </button>
+              </div>
+              <p v-if="unassigned.length" class="muted team-note">
+                Not on a team yet: {{ unassigned.map((player) => player.name).join(', ') }}. They’ll be
+                put on the smaller team when the game starts.
+              </p>
+              <button v-if="isHost" class="team-shuffle" @click="send({ type: 'shuffleTeams' })">
+                Shuffle teams
+              </button>
+            </div>
 
             <template v-if="selectedGame">
               <button
@@ -356,6 +425,58 @@ function endGame() {
 
 .end-game {
   justify-self: end;
+}
+
+.team-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.team-column {
+  display: grid;
+  gap: 0.4rem;
+  align-content: start;
+  padding: 0.6rem 0.8rem;
+  border-left: 4px solid var(--team);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--team) 12%, transparent);
+}
+
+.team-column h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.team-column ul {
+  display: grid;
+  gap: 0.2rem;
+  min-height: 1.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.team-column button {
+  justify-self: start;
+}
+
+.team-0 {
+  --team: #e4572e;
+}
+
+.team-1 {
+  --team: #1b998b;
+}
+
+.team-note,
+.team-shuffle {
+  grid-column: 1 / -1;
+}
+
+.team-shuffle {
+  justify-self: start;
 }
 
 /* Games get the full width, and the player list moves underneath. */

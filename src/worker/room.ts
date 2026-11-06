@@ -24,6 +24,7 @@ interface Player {
   token: string
   connectionId: string | null
   expiry: ReturnType<typeof setTimeout> | null
+  team: number | null
 }
 
 interface ActiveGameRecord {
@@ -102,6 +103,10 @@ export class Room extends Server<Env> {
         return this.handleSelectGame(connection, player, message.gameId)
       case 'setOption':
         return this.handleSetOption(connection, player, message.key, message.value)
+      case 'setTeam':
+        return this.handleSetTeam(connection, player, message.team)
+      case 'shuffleTeams':
+        return this.handleShuffleTeams(connection, player)
       case 'start':
         return this.handleStart(connection, player)
       case 'move':
@@ -139,6 +144,7 @@ export class Room extends Server<Env> {
         token,
         connectionId: connection.id,
         expiry: null,
+        team: null,
       }
       this.players.set(player.id, player)
       this.playerByConnection.set(connection.id, player.id)
@@ -193,12 +199,10 @@ export class Room extends Server<Env> {
 
     const option = getGame(this.selectedGameId)!.options?.find((candidate) => candidate.key === key)
     if (!option) return this.sendError(connection, 'That setting does not exist.')
-    if (
-      typeof value !== 'number' ||
-      !Number.isInteger(value) ||
-      value < option.min ||
-      value > option.max
-    ) {
+    const allowed = option.choices
+      ? option.choices.some((choice) => choice.value === value)
+      : typeof value === 'number' && Number.isInteger(value) && value >= option.min && value <= option.max
+    if (!allowed || typeof value !== 'number') {
       this.sendError(connection, `${option.label} must be from ${option.min} to ${option.max}.`)
       // Puts the host's input back to the value that's actually in effect.
       return this.sendState(connection)
@@ -207,22 +211,78 @@ export class Room extends Server<Env> {
     this.broadcastState()
   }
 
+  private teamSettings() {
+    const settings = getGame(this.selectedGameId)!.teams
+    return settings?.when(this.gameOptions) ? settings : null
+  }
+
+  private handleSetTeam(connection: Connection, player: Player, team: unknown) {
+    const settings = this.teamSettings()
+    if (!settings) return this.sendError(connection, 'This game isn’t played in teams.')
+    if (this.isGameInProgress()) return this.sendError(connection, 'Finish this game first.')
+    if (typeof team !== 'number' || !Number.isInteger(team) || team < 0 || team >= settings.names.length) {
+      return this.sendError(connection, 'That team doesn’t exist.')
+    }
+    player.team = team
+    this.broadcastState()
+  }
+
+  private handleShuffleTeams(connection: Connection, player: Player) {
+    if (player.id !== this.hostId) return this.sendError(connection, 'Only the host can do that.')
+    const settings = this.teamSettings()
+    if (!settings) return this.sendError(connection, 'This game isn’t played in teams.')
+    if (this.isGameInProgress()) return this.sendError(connection, 'Finish this game first.')
+    const seats = [...this.players.values()]
+    for (let i = seats.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[seats[i], seats[j]] = [seats[j]!, seats[i]!]
+    }
+    seats.forEach((seat, index) => (seat.team = index % settings.names.length))
+    this.broadcastState()
+  }
+
+  /** Puts anyone who hasn't picked a team onto the smallest one. */
+  private fillTeams(seats: Player[], teamCount: number) {
+    const sizes = Array<number>(teamCount).fill(0)
+    for (const seat of seats) if (seat.team !== null && seat.team < teamCount) sizes[seat.team]! += 1
+    for (const seat of seats) {
+      if (seat.team !== null && seat.team < teamCount) continue
+      const smallest = sizes.indexOf(Math.min(...sizes))
+      seat.team = smallest
+      sizes[smallest]! += 1
+    }
+    return sizes
+  }
+
   private handleStart(connection: Connection, player: Player) {
     if (player.id !== this.hostId) return this.sendError(connection, 'Only the host can do that.')
     if (this.isGameInProgress()) return this.sendError(connection, 'A game is already running.')
 
     const definition = getGame(this.selectedGameId)!
-    const playerIds = [...this.players.values()]
-      .filter((seat) => seat.connectionId)
-      .map((seat) => seat.id)
+    const seats = [...this.players.values()].filter((seat) => seat.connectionId)
+    const playerIds = seats.map((seat) => seat.id)
     if (playerIds.length < definition.minPlayers || playerIds.length > definition.maxPlayers) {
       return this.sendError(connection, `${definition.name} needs ${playersNeeded(definition)}.`)
+    }
+
+    const teams: Record<string, number> = {}
+    const settings = this.teamSettings()
+    if (settings) {
+      const sizes = this.fillTeams(seats, settings.names.length)
+      if (sizes.some((size) => size < settings.minPerTeam)) {
+        this.broadcastState()
+        return this.sendError(
+          connection,
+          `Each team needs at least ${settings.minPerTeam} connected players.`,
+        )
+      }
+      for (const seat of seats) teams[seat.id] = seat.team!
     }
 
     this.game = {
       gameId: definition.id,
       playerIds,
-      state: definition.setup(playerIds, this.gameOptions),
+      state: definition.setup(playerIds, this.gameOptions, { teams }),
     }
     this.broadcastState()
   }
@@ -300,10 +360,11 @@ export class Room extends Server<Env> {
       hostId: this.hostId,
       selectedGameId: this.selectedGameId,
       options: this.gameOptions,
-      players: [...this.players.values()].map(({ id, name, connectionId }) => ({
+      players: [...this.players.values()].map(({ id, name, connectionId, team }) => ({
         id,
         name,
         connected: connectionId !== null,
+        team,
       })),
       game:
         game && definition
