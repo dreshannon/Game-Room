@@ -27,7 +27,6 @@ export function useRoom(code: string) {
   const tokenKey = `room:${code}:token`
   const nameKey = `room:${code}:name`
   let token = readSession(tokenKey)
-  let pendingName: string | null = null
   let toastTimer: ReturnType<typeof setTimeout> | undefined
 
   const socket = new PartySocket({ host: location.host, party: 'room', room: code })
@@ -53,13 +52,13 @@ export function useRoom(code: string) {
   socket.addEventListener('message', (event: MessageEvent<string>) => {
     const message = JSON.parse(event.data) as ServerMessage
     switch (message.type) {
-      case 'state':
+      case 'state': {
         state.value = message.state
-        if (message.state.you && pendingName) {
-          writeSession(nameKey, pendingName)
-          pendingName = null
-        }
+        // Remembers the name the server accepted, so reconnecting uses the latest one.
+        const me = message.state.players.find((player) => player.id === message.state.you)
+        if (me) writeSession(nameKey, me.name)
         break
+      }
       case 'error':
       case 'notice':
         showToast(message.message)
@@ -76,15 +75,16 @@ export function useRoom(code: string) {
       token = crypto.randomUUID()
       writeSession(tokenKey, token)
     }
-    pendingName = name
     toast.value = null
     send({ type: 'join', name, token })
   }
+
+  const rename = (name: string) => send({ type: 'rename', name })
 
   onBeforeUnmount(() => {
     clearTimeout(toastTimer)
     socket.close()
   })
 
-  return { state, connected, closedReason, toast, join, send }
+  return { state, connected, closedReason, toast, join, rename, send }
 }

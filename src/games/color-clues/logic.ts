@@ -277,6 +277,11 @@ export const colorClues: Game<ColorCluesState, ColorCluesView> = {
     return { winnerIds: state.order.filter((id) => state.scores[id] === top) }
   },
 
+  waitingOn(state) {
+    if (state.phase === 'firstClue' || state.phase === 'secondClue') return [state.giverId]
+    return state.queue.slice(0, 1)
+  },
+
   onPlayerLeave(state, playerId) {
     const leavingIndex = state.order.indexOf(playerId)
     if (leavingIndex === -1) return state

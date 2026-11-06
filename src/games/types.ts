@@ -33,6 +33,8 @@ export interface Game<State = unknown, View = unknown> {
   /** What one viewer may see. `viewerId` is null for anyone not yet in the room. */
   viewFor(state: State, viewerId: string | null): View
   result(state: State): GameResult | null
+  /** Players the game is waiting on right now, so they can be alerted that it's their turn. */
+  waitingOn?(state: State): string[]
   /**
    * Called when a player leaves for good during a game. Return the state to carry on with,
    * or null to end the game. Without this, any player leaving ends the game.

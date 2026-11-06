@@ -1,9 +1,10 @@
 import { colorClues } from './color-clues/logic'
+import { luckyStreak, luckyStreakRevenge } from './lucky-streak/engine'
 import { ticTacToe } from './tic-tac-toe/logic'
 import type { Game, GameOptionValues } from './types'
 
 // Each game has its own State and View types, which the room never looks inside.
-export const games: Game<any, any>[] = [colorClues, ticTacToe]
+export const games: Game<any, any>[] = [colorClues, luckyStreak, luckyStreakRevenge, ticTacToe]
 
 export const getGame = (id: string) => games.find((game) => game.id === id)
 

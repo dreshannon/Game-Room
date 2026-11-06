@@ -4,13 +4,18 @@ import { games, getGame } from '../../games'
 import { MAX_NAME_LENGTH, type ClosedReason, type PublicPlayer } from '../../shared/protocol'
 import { gameViews } from '../games'
 import { useRoom } from '../useRoom'
+import { useTurnAlert } from '../useTurnAlert'
+import RulesDialog from './RulesDialog.vue'
 
 const props = defineProps<{ code: string }>()
 
-const { state, connected, closedReason, toast, join, send } = useRoom(props.code)
+const { state, connected, closedReason, toast, join, rename, send } = useRoom(props.code)
 
 const name = ref('')
 const copied = ref(false)
+const renaming = ref(false)
+const newName = ref('')
+const rulesDialog = ref<InstanceType<typeof RulesDialog> | null>(null)
 
 const CLOSED_MESSAGES: Record<ClosedReason, string> = {
   not_found: 'This room does not exist or has closed.',
@@ -27,7 +32,30 @@ const canStart = computed(() => {
   const game = selectedGame.value
   return !!game && connectedCount.value >= game.minPlayers && connectedCount.value <= game.maxPlayers
 })
-const activeView = computed(() => (state.value?.game ? gameViews[state.value.game.gameId] : null))
+const activeView = computed(() =>
+  state.value?.game ? gameViews[state.value.game.gameId]?.component : null,
+)
+
+// The rules shown are for the game being played, or otherwise the one picked in the lobby.
+const rulesGame = computed(() => getGame(state.value?.game?.gameId ?? state.value?.selectedGameId ?? ''))
+const rules = computed(() => (rulesGame.value ? gameViews[rulesGame.value.id]?.rules : undefined))
+
+const isYourTurn = computed(() => {
+  const game = state.value?.game
+  return !!game && !game.result && !!state.value?.you && game.waitingOn.includes(state.value.you)
+})
+const { soundOn, toggleSound } = useTurnAlert(isYourTurn)
+
+function startRename(current: string) {
+  newName.value = current
+  renaming.value = true
+}
+
+function submitRename() {
+  const trimmed = newName.value.trim()
+  if (trimmed) rename(trimmed)
+  renaming.value = false
+}
 
 const resultText = computed(() => {
   const result = state.value?.game?.result
@@ -107,10 +135,16 @@ function endGame() {
           <p class="room-code">{{ code }}</p>
         </div>
         <div class="row">
+          <button v-if="rules" @click="rulesDialog?.open()">How to play</button>
+          <button :aria-pressed="soundOn" @click="toggleSound">
+            {{ soundOn ? 'Sound on' : 'Sound off' }}
+          </button>
           <button @click="copyLink">{{ copied ? 'Copied!' : 'Copy invite link' }}</button>
           <button @click="send({ type: 'leave' })">Leave</button>
         </div>
       </header>
+
+      <RulesDialog v-if="rules && rulesGame" ref="rulesDialog" :title="rulesGame.name" :rules="rules" />
 
       <p v-if="!connected" class="banner" role="status">Connection lost. Reconnecting…</p>
 
@@ -202,13 +236,36 @@ function endGame() {
           <h2>Players</h2>
           <ul class="players">
             <li v-for="player in state.players" :key="player.id" :class="{ away: !player.connected }">
-              <span class="player-name">{{ player.name }}</span>
+              <form
+                v-if="player.id === state.you && renaming"
+                class="rename-form"
+                @submit.prevent="submitRename"
+              >
+                <input
+                  v-model="newName"
+                  :maxlength="MAX_NAME_LENGTH"
+                  aria-label="New name"
+                  autocomplete="off"
+                  autofocus
+                  @keydown.esc="renaming = false"
+                />
+                <button class="primary small-button" type="submit" :disabled="!newName.trim()">Save</button>
+                <button class="small-button" type="button" @click="renaming = false">Cancel</button>
+              </form>
+              <span v-else class="player-name">{{ player.name }}</span>
               <span v-if="player.id === state.you" class="tag">you</span>
+              <button
+                v-if="player.id === state.you && !renaming"
+                class="small-button"
+                @click="startRename(player.name)"
+              >
+                Rename
+              </button>
               <span v-if="player.id === state.hostId" class="tag">host</span>
               <span v-if="!player.connected" class="tag">away</span>
               <button
                 v-if="isHost && player.id !== state.you"
-                class="remove-player"
+                class="small-button"
                 :aria-label="`Remove ${player.name}`"
                 @click="removePlayer(player)"
               >
@@ -351,9 +408,20 @@ function endGame() {
   opacity: 0.55;
 }
 
-.remove-player {
+.small-button {
   padding: 0.1rem 0.5rem;
   font-size: 0.75rem;
+}
+
+.rename-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.rename-form input {
+  width: 10rem;
+  padding: 0.2rem 0.5rem;
 }
 
 .tag {

@@ -96,6 +96,8 @@ export class Room extends Server<Env> {
     if (!player) return this.sendError(connection, 'Join the room first.')
 
     switch (message.type) {
+      case 'rename':
+        return this.handleRename(connection, player, message.name)
       case 'selectGame':
         return this.handleSelectGame(connection, player, message.gameId)
       case 'setOption':
@@ -121,12 +123,10 @@ export class Room extends Server<Env> {
       return this.sendError(connection, 'Could not join. Reload the page and try again.')
     }
 
-    const seats = [...this.players.values()]
-    const existing = seats.find((player) => player.token === token)
-    const nameTaken = seats.some(
-      (player) => player !== existing && player.name.toLowerCase() === name.toLowerCase(),
-    )
-    if (nameTaken) return this.sendError(connection, 'That name is taken in this room.')
+    const existing = [...this.players.values()].find((player) => player.token === token)
+    if (this.isNameTaken(name, existing)) {
+      return this.sendError(connection, 'That name is taken in this room.')
+    }
 
     if (existing) {
       this.takeOverSeat(existing, connection)
@@ -144,6 +144,22 @@ export class Room extends Server<Env> {
       this.playerByConnection.set(connection.id, player.id)
       this.hostId ??= player.id
     }
+    this.broadcastState()
+  }
+
+  private isNameTaken(name: string, self?: Player) {
+    return [...this.players.values()].some(
+      (player) => player !== self && player.name.toLowerCase() === name.toLowerCase(),
+    )
+  }
+
+  private handleRename(connection: Connection, player: Player, rawName: unknown) {
+    const name = cleanName(rawName)
+    if (!name) return this.sendError(connection, 'Enter a name.')
+    if (this.isNameTaken(name, player)) {
+      return this.sendError(connection, 'That name is taken in this room.')
+    }
+    player.name = name
     this.broadcastState()
   }
 
@@ -296,6 +312,7 @@ export class Room extends Server<Env> {
               playerIds: game.playerIds,
               view: definition.viewFor(game.state, viewerId),
               result: definition.result(game.state),
+              waitingOn: definition.waitingOn?.(game.state) ?? [],
             }
           : null,
     }

@@ -71,4 +71,8 @@ export const ticTacToe: Game<TicTacToeState, TicTacToeView> = {
     if (line) return { winnerIds: [state.players[state.board[line[0]!]!]] }
     return state.board.every(Boolean) ? { winnerIds: [] } : null
   },
+
+  waitingOn(state) {
+    return ticTacToe.result(state) ? [] : [state.players[state.turn]]
+  },
 }

@@ -5,6 +5,7 @@ export const MAX_NAME_LENGTH = 20
 
 export type ClientMessage =
   | { type: 'join'; name: string; token: string }
+  | { type: 'rename'; name: string }
   | { type: 'selectGame'; gameId: string }
   | { type: 'setOption'; key: string; value: number }
   | { type: 'start' }
@@ -24,6 +25,8 @@ export interface ActiveGame {
   playerIds: string[]
   view: unknown
   result: GameResult | null
+  /** Players whose turn it is. */
+  waitingOn: string[]
 }
 
 export interface RoomState {
