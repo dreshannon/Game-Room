@@ -44,6 +44,7 @@ export class Room extends Server<Env> {
   private hostId: string | null = null
   private selectedGameId = games[0]!.id
   private gameOptions = defaultOptions(games[0]!)
+  private pickedIds: string[] = []
   private game: ActiveGameRecord | null = null
   private emptyTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -107,6 +108,8 @@ export class Room extends Server<Env> {
         return this.handleSetTeam(connection, player, message.team)
       case 'shuffleTeams':
         return this.handleShuffleTeams(connection, player)
+      case 'pickPlayer':
+        return this.handlePickPlayer(connection, player, message.playerId, message.picked)
       case 'start':
         return this.handleStart(connection, player)
       case 'move':
@@ -241,6 +244,36 @@ export class Room extends Server<Env> {
     this.broadcastState()
   }
 
+  private handlePickPlayer(connection: Connection, host: Player, playerId: unknown, picked: unknown) {
+    if (host.id !== this.hostId) return this.sendError(connection, 'Only the host can do that.')
+    const seats = getGame(this.selectedGameId)!.seats
+    if (!seats) return this.sendError(connection, 'Everyone plays in this game.')
+    if (this.isGameInProgress()) return this.sendError(connection, 'Finish this game first.')
+    if (typeof playerId !== 'string' || !this.players.has(playerId)) {
+      return this.sendError(connection, 'That player isn’t in the room.')
+    }
+    const others = this.pickedIds.filter((id) => id !== playerId)
+    if (picked && others.length >= seats) {
+      return this.sendError(connection, `Only ${seats} can play. Take someone out first.`)
+    }
+    this.pickedIds = picked ? [...others, playerId] : others
+    this.broadcastState()
+  }
+
+  /**
+   * Who plays a fixed-seat game: the host's picks who are connected, topped up with
+   * whoever joined the room first if the host picked fewer than needed.
+   */
+  private seatedPlayers(seats: number) {
+    const connected = [...this.players.values()].filter((seat) => seat.connectionId).map((seat) => seat.id)
+    const chosen = this.pickedIds.filter((id) => connected.includes(id))
+    for (const id of connected) {
+      if (chosen.length >= seats) break
+      if (!chosen.includes(id)) chosen.push(id)
+    }
+    return chosen
+  }
+
   /** Puts anyone who hasn't picked a team onto the smallest one. */
   private fillTeams(seats: Player[], teamCount: number) {
     const sizes = Array<number>(teamCount).fill(0)
@@ -259,8 +292,11 @@ export class Room extends Server<Env> {
     if (this.isGameInProgress()) return this.sendError(connection, 'A game is already running.')
 
     const definition = getGame(this.selectedGameId)!
-    const seats = [...this.players.values()].filter((seat) => seat.connectionId)
-    const playerIds = seats.map((seat) => seat.id)
+    const seated = definition.seats ? this.seatedPlayers(definition.seats) : null
+    const seats = [...this.players.values()].filter(
+      (seat) => seat.connectionId && (!seated || seated.includes(seat.id)),
+    )
+    const playerIds = seated ?? seats.map((seat) => seat.id)
     if (playerIds.length < definition.minPlayers || playerIds.length > definition.maxPlayers) {
       return this.sendError(connection, `${definition.name} needs ${playersNeeded(definition)}.`)
     }
@@ -324,6 +360,7 @@ export class Room extends Server<Env> {
     if (player.expiry) clearTimeout(player.expiry)
     if (player.connectionId) this.playerByConnection.delete(player.connectionId)
     this.players.delete(playerId)
+    this.pickedIds = this.pickedIds.filter((id) => id !== playerId)
 
     if (this.game?.playerIds.includes(playerId) && this.isGameInProgress()) {
       const definition = getGame(this.game.gameId)!
@@ -360,6 +397,7 @@ export class Room extends Server<Env> {
       hostId: this.hostId,
       selectedGameId: this.selectedGameId,
       options: this.gameOptions,
+      pickedIds: this.pickedIds,
       players: [...this.players.values()].map(({ id, name, connectionId, team }) => ({
         id,
         name,
@@ -441,6 +479,7 @@ export class Room extends Server<Env> {
     this.game = null
     this.selectedGameId = games[0]!.id
     this.gameOptions = defaultOptions(games[0]!)
+    this.pickedIds = []
     this.emptyTimer = null
   }
 }

@@ -10,6 +10,7 @@ export type ClientMessage =
   | { type: 'setOption'; key: string; value: number }
   | { type: 'setTeam'; team: number }
   | { type: 'shuffleTeams' }
+  | { type: 'pickPlayer'; playerId: string; picked: boolean }
   | { type: 'start' }
   | { type: 'move'; move: unknown }
   | { type: 'endGame' }
@@ -41,6 +42,8 @@ export interface RoomState {
   players: PublicPlayer[]
   selectedGameId: string
   options: GameOptionValues
+  /** Players the host has picked to play, for games with a fixed number of seats. */
+  pickedIds: string[]
   game: ActiveGame | null
 }
 

@@ -47,6 +47,11 @@ export interface Game<State = unknown, View = unknown> {
   maxPlayers: number
   options?: GameOption[]
   teams?: TeamSettings
+  /**
+   * For games with a fixed number of players: the host picks who plays in the lobby,
+   * and everyone else in the room watches.
+   */
+  seats?: number
   setup(playerIds: string[], options: GameOptionValues, context?: SetupContext): State
   /** `move` comes straight from the client, so it must be validated. */
   applyMove(state: State, playerId: string, move: unknown): State

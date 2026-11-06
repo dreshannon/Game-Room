@@ -44,12 +44,21 @@ const unassigned = computed(() => {
   const count = teamSettings.value?.names.length ?? 0
   return (state.value?.players ?? []).filter((player) => player.team === null || player.team >= count)
 })
+const pickedPlayers = computed(() =>
+  (state.value?.pickedIds ?? [])
+    .map((id) => state.value?.players.find((player) => player.id === id))
+    .filter((player): player is PublicPlayer => !!player),
+)
+const isPicked = (id: string) => !!state.value?.pickedIds.includes(id)
+
 const yourLobbyTeam = computed(
   () => state.value?.players.find((player) => player.id === state.value?.you)?.team ?? null,
 )
 const connectedCount = computed(() => state.value?.players.filter((p) => p.connected).length ?? 0)
 const canStart = computed(() => {
   const game = selectedGame.value
+  // Games with seats only need enough people for the seats, since anyone else watches.
+  if (game?.seats) return connectedCount.value >= game.seats
   return !!game && connectedCount.value >= game.minPlayers && connectedCount.value <= game.maxPlayers
 })
 const activeView = computed(() =>
@@ -247,6 +256,38 @@ function endGame() {
               </p>
             </template>
 
+            <div v-if="selectedGame?.seats" class="seat-picker">
+              <h3>Who plays?</h3>
+              <ul v-if="isHost" class="seat-list">
+                <li v-for="player in state.players" :key="player.id">
+                  <label>
+                    <input
+                      type="checkbox"
+                      :checked="isPicked(player.id)"
+                      :disabled="!isPicked(player.id) && pickedPlayers.length >= selectedGame.seats"
+                      @change="
+                        send({
+                          type: 'pickPlayer',
+                          playerId: player.id,
+                          picked: ($event.target as HTMLInputElement).checked,
+                        })
+                      "
+                    />
+                    {{ player.name }}<template v-if="player.id === state.you"> (you)</template>
+                  </label>
+                </li>
+              </ul>
+              <p v-else-if="pickedPlayers.length">
+                Playing: <strong>{{ pickedPlayers.map((player) => player.name).join(' and ') }}</strong>
+              </p>
+              <p class="muted">
+                {{ selectedGame.seats }} play and everyone else watches.
+                <template v-if="pickedPlayers.length < selectedGame.seats">
+                  Open seats go to whoever joined the room first.
+                </template>
+              </p>
+            </div>
+
             <div v-if="teamSettings" class="team-picker">
               <div
                 v-for="(teamName, team) in teamSettings.names"
@@ -288,6 +329,10 @@ function endGame() {
               </button>
               <p class="muted">
                 <template v-if="canStart && !isHost">Waiting for the host to start…</template>
+                <template v-else-if="!canStart && selectedGame.seats">
+                  {{ selectedGame.name }} needs {{ selectedGame.seats }} connected players.
+                  {{ connectedCount }} here now.
+                </template>
                 <template v-else-if="!canStart">
                   {{ selectedGame.name }} needs
                   {{
@@ -425,6 +470,31 @@ function endGame() {
 
 .end-game {
   justify-self: end;
+}
+
+.seat-picker {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.seat-picker h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.seat-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.seat-list label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .team-picker {
