@@ -60,6 +60,7 @@ function submitRename() {
 const resultText = computed(() => {
   const result = state.value?.game?.result
   if (!result) return null
+  if (result.message) return result.message
   if (result.winnerIds.length === 0) return 'It’s a draw!'
   if (result.winnerIds.includes(state.value?.you ?? '')) return 'You win!'
   const winners = result.winnerIds.map(

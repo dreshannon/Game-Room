@@ -4,6 +4,8 @@ export class MoveError extends Error {}
 export interface GameResult {
   /** Empty means a draw. */
   winnerIds: string[]
+  /** Replaces the usual "You win!" line, such as for team games. */
+  message?: string
 }
 
 /** A whole-number setting the host can change in the lobby. */

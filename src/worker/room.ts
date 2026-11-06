@@ -12,7 +12,7 @@ import type { Env } from './env'
 
 const SEAT_GRACE_MS = 60_000 // How long a disconnected player keeps their seat.
 const EMPTY_ROOM_TTL_MS = 65_000 // How long a room with no connections survives.
-const MAX_PLAYERS = 8
+const MAX_PLAYERS = 15
 const MAX_CONNECTIONS = 32
 const MAX_MESSAGE_LENGTH = 1024
 const MAX_MESSAGES_PER_SECOND = 20
