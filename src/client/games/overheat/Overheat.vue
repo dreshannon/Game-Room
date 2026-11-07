@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import {
-  COOLDOWN_BY_GEAR,
-  MAX_GEAR,
   type Card,
   type OverheatMove,
   type OverheatView,
@@ -10,6 +8,8 @@ import {
 } from '../../../games/overheat/logic'
 import { cornersOf, getTrack } from '../../../games/overheat/tracks'
 import type { PublicPlayer } from '../../../shared/protocol'
+import CardStack from './CardStack.vue'
+import GearShifter from './GearShifter.vue'
 import RaceCard from './RaceCard.vue'
 import TrackView, { type TrackCar } from './TrackView.vue'
 
@@ -86,11 +86,6 @@ const clogged = computed(() => playable.value.length < gear.value)
 const canPlan = computed(
   () => props.view.phase === 'plan' && !!me.value && me.value.place === null && !props.view.you?.plan,
 )
-
-function shiftCost(target: number) {
-  const shift = Math.abs(target - (me.value?.gear ?? 1))
-  return shift === 2 ? 1 : shift > 2 ? null : 0
-}
 
 function chooseGear(target: number) {
   gear.value = target
@@ -243,24 +238,24 @@ watch(
 
     <div class="panels">
       <section v-if="me && view.you && me.place === null" class="cockpit">
+        <GearShifter
+          :gear="canPlan ? gear : (view.you.plan?.gear ?? me.gear)"
+          :current="me.gear"
+          :engine="me.engine"
+          :disabled="!canPlan"
+          @shift="chooseGear"
+        />
+        <div class="controls">
         <div class="gauges">
-          <div class="gauge">
-            <span class="label">Gear</span>
-            <strong>{{ me.gear }}</strong>
-          </div>
           <div class="gauge heat">
             <span class="label">Engine Heat</span>
             <span class="pips" :aria-label="`${me.engine} Heat in the engine`">
               <span v-for="i in Math.max(me.engine, 6)" :key="i" class="pip" :class="{ full: i <= me.engine }" />
             </span>
           </div>
-          <div class="gauge">
-            <span class="label">Deck</span>
-            <strong>{{ me.deck }}</strong>
-          </div>
-          <div class="gauge">
-            <span class="label">Discard</span>
-            <strong>{{ me.discard }}</strong>
+          <div class="piles">
+            <CardStack :count="me.deck" label="Deck" />
+            <CardStack :count="me.discard" label="Discard" muted />
           </div>
         </div>
 
@@ -273,23 +268,6 @@ watch(
 
         <!-- Choosing a gear and cards -->
         <template v-if="canPlan">
-          <div class="gears" role="radiogroup" aria-label="Gear">
-            <button
-              v-for="g in MAX_GEAR"
-              :key="g"
-              role="radio"
-              :aria-checked="gear === g"
-              :class="{ chosen: gear === g }"
-              :disabled="shiftCost(g) === null || (shiftCost(g) === 1 && me.engine === 0)"
-              @click="chooseGear(g)"
-            >
-              <strong>{{ g }}</strong>
-              <span class="sub">
-                {{ g }} card{{ g === 1 ? '' : 's' }}<template v-if="COOLDOWN_BY_GEAR[g]"> · cool {{ COOLDOWN_BY_GEAR[g] }}</template>
-              </span>
-              <span v-if="shiftCost(g) === 1" class="sub cost">1 Heat</span>
-            </button>
-          </div>
           <p v-if="clogged" class="warning">
             Your hand is clogged with Heat. You can only play {{ playable.length }}, so your car will stall and
             drop to 1st gear.
@@ -363,6 +341,7 @@ watch(
             {{ discardPicked.length ? `Discard ${discardPicked.length} and draw` : 'Keep my hand and draw' }}
           </button>
           <span class="muted">Tap speed cards to discard them.</span>
+        </div>
         </div>
       </section>
 
@@ -472,10 +451,30 @@ watch(
   }
 }
 
-.cockpit,
+.cockpit {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+@media (max-width: 560px) {
+  .cockpit {
+    gap: 0.6rem;
+    padding: 0.6rem;
+  }
+}
+
+.controls,
 .side {
   display: grid;
   gap: 0.75rem;
+}
+
+.side {
   padding: 1rem;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -486,6 +485,11 @@ watch(
   flex-wrap: wrap;
   gap: 0.5rem 1.25rem;
   align-items: end;
+}
+
+.piles {
+  display: flex;
+  gap: 0.75rem;
 }
 
 .gauge {
@@ -536,39 +540,6 @@ watch(
   border: 2px solid #d62828;
   border-radius: 999px;
   color: var(--ink);
-}
-
-.gears {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.4rem;
-}
-
-.gears button {
-  display: grid;
-  gap: 0.1rem;
-  justify-items: center;
-  padding: 0.5rem 0.25rem;
-}
-
-.gears strong {
-  font-size: 1.4rem;
-  line-height: 1;
-}
-
-.gears .chosen {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.sub {
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-
-.cost {
-  color: #e5383b;
-  font-weight: 700;
 }
 
 .hand {

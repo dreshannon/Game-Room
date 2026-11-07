@@ -68,6 +68,17 @@ const label = computed(() => {
     box-shadow 0.15s;
 }
 
+@media (max-width: 560px) {
+  .race-card {
+    width: 3rem;
+    height: 4.3rem;
+  }
+
+  .big {
+    font-size: 1.6rem;
+  }
+}
+
 .race-card.small {
   width: 2.6rem;
   height: 3.6rem;
