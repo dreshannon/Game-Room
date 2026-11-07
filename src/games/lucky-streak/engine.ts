@@ -48,6 +48,8 @@ export interface Hand {
   modifiers: ModifierCard[]
   secondChance: ActionCard | null
   status: Status
+  /** Set when a Freeze made this player stay, so the table can show it. */
+  frozen?: boolean
 }
 
 /** Work still to do before the current turn can finish, kept as a stack. */
@@ -136,7 +138,8 @@ export type StreakMove =
 
 export const DEFAULT_TARGET_SCORE = 200
 export const FLIP_7_BONUS = 15
-const LOG_LENGTH = 10
+// Long enough for the client to replay a whole turn, such as a deal with several Flips.
+const LOG_LENGTH = 40
 
 // ---------------------------------------------------------------------------
 // Deck
@@ -365,6 +368,7 @@ function applyToTarget(
       return
     case 'freeze':
       target.status = 'stayed'
+      target.frozen = true
       break
     case 'flipThree':
       state.stack.push({ type: 'flip', playerId: targetId, remaining: 3, queued: [] })

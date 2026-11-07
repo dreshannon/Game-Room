@@ -10,12 +10,14 @@ function readSoundSetting() {
   }
 }
 
+/** The room's sound setting, shared with the games' own sound effects. */
+export const soundOn = ref(readSoundSetting())
+
 /**
  * Tells a player when it becomes their turn: a chime if sound is on, and a flashing tab
  * title (plus a buzz on phones that support it) while they're looking at another tab.
  */
 export function useTurnAlert(isYourTurn: Ref<boolean>) {
-  const soundOn = ref(readSoundSetting())
   const baseTitle = document.title
   let audio: AudioContext | null = null
   let flashTimer: ReturnType<typeof setInterval> | undefined

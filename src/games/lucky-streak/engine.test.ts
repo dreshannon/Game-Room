@@ -175,6 +175,8 @@ describe('classic actions', () => {
     expect(turnOf(state)).toBe('b')
     state = target(state, 'b', 'c')
     expect(state.hands.c!.status).toBe('stayed')
+    expect(state.hands.c!.frozen).toBe(true)
+    expect(state.hands.b!.frozen).toBeUndefined()
     expect(turnOf(state)).toBe('a')
   })
 

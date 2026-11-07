@@ -7,6 +7,7 @@ const props = defineProps<{
   selectable?: boolean
   selected?: boolean
   small?: boolean
+  large?: boolean
 }>()
 
 defineEmits<{ select: [] }>()
@@ -31,6 +32,12 @@ const caption = computed(() => {
   if (card.kind !== 'number' || !card.special) return null
   return { zero: 'The Zero', unlucky7: 'Unlucky', lucky13: 'Lucky' }[card.special]
 })
+
+const classes = computed(() => [
+  props.card.kind,
+  props.card.kind === 'number' ? props.card.special : null,
+  { small: props.small, large: props.large },
+])
 </script>
 
 <template>
@@ -38,97 +45,180 @@ const caption = computed(() => {
     v-if="selectable"
     type="button"
     class="playing-card"
-    :class="[card.kind, card.kind === 'number' ? card.special : null, { selected, small }]"
+    :class="[classes, { selected }]"
     :style="style"
     :aria-pressed="selected"
     :aria-label="cardName(card)"
     @click="$emit('select')"
   >
+    <span class="deco top" aria-hidden="true"></span>
     <span class="label">{{ label }}</span>
     <span v-if="caption" class="caption">{{ caption }}</span>
+    <span class="deco bottom" aria-hidden="true"></span>
   </button>
-  <span
-    v-else
-    class="playing-card"
-    :class="[card.kind, card.kind === 'number' ? card.special : null, { small }]"
-    :style="style"
-    role="img"
-    :aria-label="cardName(card)"
-  >
+  <span v-else class="playing-card" :class="classes" :style="style" role="img" :aria-label="cardName(card)">
+    <span class="deco top" aria-hidden="true"></span>
     <span class="label">{{ label }}</span>
     <span v-if="caption" class="caption">{{ caption }}</span>
+    <span class="deco bottom" aria-hidden="true"></span>
   </span>
 </template>
 
 <style scoped>
 .playing-card {
   --card-hue: 220;
+  /* Number cards: a cream face with lines and numeral in the number's own color. */
+  --face: hsl(var(--card-hue) 60% 97%);
+  --trim: hsl(var(--card-hue) 55% 40%);
+  --text: hsl(var(--card-hue) 70% 26%);
+  --w: 3.1rem;
+  --h: 4.3rem;
   position: relative;
   display: inline-flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 3.1rem;
-  height: 4.3rem;
+  flex: none;
+  width: var(--w);
+  height: var(--h);
   padding: 0.2rem;
-  border: 2px solid hsl(var(--card-hue) 55% 38%);
+  border: 2px solid var(--trim);
   border-radius: 0.45rem;
-  background: hsl(var(--card-hue) 80% 94%);
-  color: hsl(var(--card-hue) 70% 25%);
+  background: var(--face);
+  color: var(--text);
   font: inherit;
-  line-height: 1.1;
+  font-family: Futura, 'Century Gothic', 'Avenir Next', 'Trebuchet MS', sans-serif;
+  line-height: 1.05;
   text-align: center;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.15);
+  /* A second, thinner border inside the first. */
+  box-shadow:
+    inset 0 0 0 2px var(--face),
+    inset 0 0 0 3px var(--trim),
+    0 1px 3px rgb(0 0 0 / 0.18);
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease,
+    filter 0.4s ease;
 }
 
 .playing-card.small {
-  width: 2.3rem;
-  height: 3.2rem;
+  --w: 2.3rem;
+  --h: 3.2rem;
+}
+
+.playing-card.large {
+  --w: var(--big-card-w, 4.4rem);
+  --h: var(--big-card-h, 6.16rem);
+  border-radius: 0.55rem;
+}
+
+/* Stepped trapezoids at the top and bottom, like the back of the deck. */
+.deco {
+  position: absolute;
+  left: 50%;
+  width: 58%;
+  height: 13%;
+  background: var(--trim);
+  transform: translateX(-50%);
+  clip-path: polygon(0 0, 100% 0, 80% 100%, 20% 100%);
+}
+
+.deco::after {
+  content: '';
+  position: absolute;
+  inset: 0 26% -60%;
+  background: var(--trim);
+  opacity: 0.55;
+  clip-path: polygon(0 0, 100% 0, 75% 100%, 25% 100%);
+}
+
+.deco.top {
+  top: 4px;
+}
+
+.deco.bottom {
+  bottom: 4px;
+  transform: translateX(-50%) rotate(180deg);
 }
 
 .label {
-  font-size: 1.4rem;
-  font-weight: 800;
+  position: relative;
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .small .label {
   font-size: 1.05rem;
 }
 
+.large .label {
+  font-size: 2rem;
+}
+
+.small .deco {
+  height: 11%;
+}
+
 .caption {
-  font-size: 0.55rem;
+  position: relative;
+  font-size: 0.5rem;
   font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.modifier,
+.large .caption {
+  font-size: 0.62rem;
+}
+
+/* Modifiers are gold on ink, actions are terracotta on ink. */
+.modifier {
+  --face: #221f1a;
+  --trim: #d6a84a;
+  --text: #f3d48a;
+}
+
 .action {
-  border-color: #222222;
-  background: #2b2b2b;
-  color: #ffffff;
+  --face: #221f1a;
+  --trim: #e0603a;
+  --text: #fbe9dc;
 }
 
 .modifier .label {
   font-size: 1.15rem;
 }
 
+.large.modifier .label {
+  font-size: 1.6rem;
+}
+
 .action .label {
-  font-size: 0.62rem;
-  font-weight: 800;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.large.action .label {
+  font-size: 0.78rem;
+}
+
+.small.action .label {
+  font-size: 0.46rem;
 }
 
 .zero,
 .unlucky7 {
-  border-color: #111111;
-  background: #3a3a3a;
-  color: #ffd84d;
+  --face: #2b2823;
+  --trim: #ffd84d;
+  --text: #ffd84d;
 }
 
 .lucky13 {
-  border-color: #a07800;
-  background: #ffe680;
-  color: #4a3600;
+  --face: #fff1b8;
+  --trim: #a07800;
+  --text: #4a3600;
 }
 
 button.playing-card {
@@ -137,16 +227,25 @@ button.playing-card {
   outline-offset: 2px;
 }
 
+button.playing-card:hover {
+  transform: translateY(-2px);
+}
+
 button.playing-card.selected {
   outline-style: solid;
   transform: translateY(-4px);
 }
 
 @media (prefers-color-scheme: dark) {
-  .playing-card:not(.modifier, .action, .zero, .unlucky7, .lucky13) {
-    background: hsl(var(--card-hue) 45% 22%);
-    color: hsl(var(--card-hue) 90% 88%);
-    border-color: hsl(var(--card-hue) 60% 60%);
+  .playing-card.number:not(.zero, .unlucky7, .lucky13) {
+    --face: hsl(var(--card-hue) 35% 16%);
+    --trim: hsl(var(--card-hue) 60% 62%);
+    --text: hsl(var(--card-hue) 90% 86%);
+  }
+
+  .modifier,
+  .action {
+    --face: #0f0e0c;
   }
 }
 </style>
