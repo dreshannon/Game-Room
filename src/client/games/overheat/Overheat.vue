@@ -69,7 +69,9 @@ const picked = ref<number[]>([])
 const discardPicked = ref<number[]>([])
 
 watch(
-  () => [props.view.round, me.value?.gear] as const,
+  // Separate sources, so only a new round or a gear change resets your picks. A getter
+  // returning a fresh array would count every server update as a change.
+  [() => props.view.round, () => me.value?.gear],
   () => {
     gear.value = me.value?.gear ?? 1
     picked.value = []
