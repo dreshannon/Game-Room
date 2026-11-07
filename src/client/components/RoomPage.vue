@@ -186,6 +186,7 @@ function endGame() {
               :view="state.game.view"
               :you="state.you"
               :players="state.players"
+              :host-id="state.hostId"
               @move="sendMove"
             />
             <div v-if="state.game.result" class="result">

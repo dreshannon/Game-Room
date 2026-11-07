@@ -5,6 +5,8 @@ import DialInRules from './rules/DialInRules.vue'
 import LuckyStreak from './LuckyStreak.vue'
 import LuckyStreakRevengeRules from './rules/LuckyStreakRevengeRules.vue'
 import LuckyStreakRules from './rules/LuckyStreakRules.vue'
+import MascotMayhem from './mascot-mayhem/MascotMayhem.vue'
+import MascotMayhemRules from './rules/MascotMayhemRules.vue'
 import OverheatRules from './rules/OverheatRules.vue'
 import Overheat from './overheat/Overheat.vue'
 import ShadeHuntRules from './rules/ShadeHuntRules.vue'
@@ -27,5 +29,6 @@ export const gameViews: Record<string, GameView> = {
   'tier-talk': { component: TierTalk, rules: TierTalkRules },
   'dial-in': { component: DialIn, rules: DialInRules },
   overheat: { component: Overheat, rules: OverheatRules },
+  'mascot-mayhem': { component: MascotMayhem, rules: MascotMayhemRules },
   'tic-tac-toe': { component: TicTacToe, rules: TicTacToeRules },
 }

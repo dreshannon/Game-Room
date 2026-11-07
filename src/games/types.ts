@@ -31,6 +31,11 @@ export interface TeamSettings {
   when(options: GameOptionValues): boolean
 }
 
+/** Who is making a move, for moves only some players may make. */
+export interface MoveContext {
+  isHost: boolean
+}
+
 export interface SetupContext {
   /** Each player's team number, when the game is played in teams. */
   teams: Record<string, number>
@@ -54,12 +59,18 @@ export interface Game<State = unknown, View = unknown> {
   seats?: number
   setup(playerIds: string[], options: GameOptionValues, context?: SetupContext): State
   /** `move` comes straight from the client, so it must be validated. */
-  applyMove(state: State, playerId: string, move: unknown): State
+  applyMove(state: State, playerId: string, move: unknown, context?: MoveContext): State
   /** What one viewer may see. `viewerId` is null for anyone not yet in the room. */
   viewFor(state: State, viewerId: string | null): View
   result(state: State): GameResult | null
   /** Players the game is waiting on right now, so they can be alerted that it's their turn. */
   waitingOn?(state: State): string[]
+  /**
+   * For games that move on by themselves, such as a race playing out: how many milliseconds
+   * until `tick` should run, or null to wait on the players. Asked again after every change.
+   */
+  tickDelay?(state: State): number | null
+  tick?(state: State): State
   /**
    * Called when a player leaves for good during a game. Return the state to carry on with,
    * or null to end the game. Without this, any player leaving ends the game.

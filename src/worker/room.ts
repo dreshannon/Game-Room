@@ -47,6 +47,9 @@ export class Room extends Server<Env> {
   private pickedIds: string[] = []
   private game: ActiveGameRecord | null = null
   private emptyTimer: ReturnType<typeof setTimeout> | null = null
+  private tickTimer: ReturnType<typeof setTimeout> | null = null
+  /** The game state the tick timer was set for, so unrelated updates don't restart it. */
+  private tickFor: unknown = null
 
   /** Called by the Worker when creating a room. Returns false if the code is in use. */
   open() {
@@ -327,7 +330,9 @@ export class Room extends Server<Env> {
     if (!this.game) return this.sendError(connection, 'No game is running.')
     const definition = getGame(this.game.gameId)!
     try {
-      this.game.state = definition.applyMove(this.game.state, player.id, move)
+      this.game.state = definition.applyMove(this.game.state, player.id, move, {
+        isHost: player.id === this.hostId,
+      })
     } catch (error) {
       if (error instanceof MoveError) return this.sendError(connection, error.message)
       console.error('Move failed', error)
@@ -425,6 +430,33 @@ export class Room extends Server<Env> {
   private broadcastState() {
     // Sent per connection because each viewer may see different game state.
     for (const connection of this.openConnections()) this.sendState(connection)
+    this.scheduleTick()
+  }
+
+  /** Lets games that play out on their own, like a race, move on without a player's move. */
+  private scheduleTick() {
+    const game = this.game
+    if (game && game.state === this.tickFor && this.tickTimer) return
+    if (this.tickTimer) clearTimeout(this.tickTimer)
+    this.tickTimer = null
+    this.tickFor = null
+    if (!game) return
+    const definition = getGame(game.gameId)!
+    if (!definition.tick || !definition.tickDelay) return
+    const delay = definition.tickDelay(game.state)
+    if (delay === null) return
+    this.tickFor = game.state
+    this.tickTimer = setTimeout(() => {
+      this.tickTimer = null
+      if (this.game !== game || game.state !== this.tickFor) return
+      try {
+        game.state = definition.tick!(game.state)
+      } catch (error) {
+        console.error('Tick failed', error)
+        return
+      }
+      this.broadcastState()
+    }, delay)
   }
 
   private openConnections() {
@@ -481,6 +513,9 @@ export class Room extends Server<Env> {
     this.gameOptions = defaultOptions(games[0]!)
     this.pickedIds = []
     this.emptyTimer = null
+    if (this.tickTimer) clearTimeout(this.tickTimer)
+    this.tickTimer = null
+    this.tickFor = null
   }
 }
 
