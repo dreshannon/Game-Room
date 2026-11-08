@@ -913,19 +913,17 @@ const heldCard = (card: Card | null): card is Card => card !== null
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  .seat.frozen,
-  .seat.you.frozen {
-    border-color: #4f8db3;
-    background:
-      linear-gradient(160deg, rgb(79 141 179 / 0.25), rgb(0 0 0 / 0) 60%),
-      var(--surface);
-  }
+:root[data-theme='dark'] .seat.frozen,
+:root[data-theme='dark'] .seat.you.frozen {
+  border-color: #4f8db3;
+  background:
+    linear-gradient(160deg, rgb(79 141 179 / 0.25), rgb(0 0 0 / 0) 60%),
+    var(--surface);
+}
 
-  .tag.ice {
-    background: #23485f;
-    color: #cfe6f4;
-  }
+:root[data-theme='dark'] .tag.ice {
+  background: #23485f;
+  color: #cfe6f4;
 }
 
 @media (max-width: 700px) {

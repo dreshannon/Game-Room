@@ -1,5 +1,5 @@
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --paper: #f7f3ea;
   --surface: #fffdf8;
   --ink: #221f1a;
@@ -11,17 +11,16 @@
   --radius: 0.6rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #1a1815;
-    --surface: #24211d;
-    --ink: #f2ede3;
-    --muted: #a89f90;
-    --line: #3c3730;
-    --accent: #f0764f;
-    --accent-ink: #1a1815;
-    --accent-soft: #4a2a1f;
-  }
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --paper: #1a1815;
+  --surface: #24211d;
+  --ink: #f2ede3;
+  --muted: #a89f90;
+  --line: #3c3730;
+  --accent: #f0764f;
+  --accent-ink: #1a1815;
+  --accent-soft: #4a2a1f;
 }
 
 *,

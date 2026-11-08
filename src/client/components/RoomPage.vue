@@ -7,6 +7,8 @@ import { gameViews } from '../games'
 import { useRoom } from '../useRoom'
 import { useTurnAlert } from '../useTurnAlert'
 import RulesDialog from './RulesDialog.vue'
+import SoundMenu from './SoundMenu.vue'
+import ThemeToggle from './ThemeToggle.vue'
 
 const props = defineProps<{ code: string }>()
 
@@ -73,7 +75,7 @@ const isYourTurn = computed(() => {
   const game = state.value?.game
   return !!game && !game.result && !!state.value?.you && game.waitingOn.includes(state.value.you)
 })
-const { soundOn, toggleSound } = useTurnAlert(isYourTurn)
+useTurnAlert(isYourTurn)
 
 function startRename(current: string) {
   newName.value = current
@@ -166,9 +168,8 @@ function endGame() {
         </div>
         <div class="row">
           <button v-if="rules" @click="rulesDialog?.open()">How to play</button>
-          <button :aria-pressed="soundOn" @click="toggleSound">
-            {{ soundOn ? 'Sound on' : 'Sound off' }}
-          </button>
+          <SoundMenu />
+          <ThemeToggle />
           <button @click="copyLink">{{ copied ? 'Copied!' : 'Copy invite link' }}</button>
           <button @click="send({ type: 'leave' })">Leave</button>
         </div>

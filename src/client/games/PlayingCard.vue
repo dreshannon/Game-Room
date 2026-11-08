@@ -236,16 +236,14 @@ button.playing-card.selected {
   transform: translateY(-4px);
 }
 
-@media (prefers-color-scheme: dark) {
-  .playing-card.number:not(.zero, .unlucky7, .lucky13) {
-    --face: hsl(var(--card-hue) 35% 16%);
-    --trim: hsl(var(--card-hue) 60% 62%);
-    --text: hsl(var(--card-hue) 90% 86%);
-  }
+:root[data-theme='dark'] .playing-card.number:not(.zero, .unlucky7, .lucky13) {
+  --face: hsl(var(--card-hue) 35% 16%);
+  --trim: hsl(var(--card-hue) 60% 62%);
+  --text: hsl(var(--card-hue) 90% 86%);
+}
 
-  .modifier,
-  .action {
-    --face: #0f0e0c;
-  }
+:root[data-theme='dark'] .modifier,
+:root[data-theme='dark'] .action {
+  --face: #0f0e0c;
 }
 </style>

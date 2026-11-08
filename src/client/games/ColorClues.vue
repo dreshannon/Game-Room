@@ -945,10 +945,8 @@ watch(tokenByCell, (tokens) => {
   font-size: 0.6rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  .warning {
-    color: #ff8a80;
-  }
+:root[data-theme='dark'] .warning {
+  color: #ff8a80;
 }
 
 @media (prefers-reduced-motion: reduce) {

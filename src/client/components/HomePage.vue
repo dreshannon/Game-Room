@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { ROOM_CODE_LENGTH } from '../../shared/protocol'
+import ThemeToggle from './ThemeToggle.vue'
 
 const code = ref('')
 const creating = ref(false)
@@ -33,6 +34,7 @@ function joinRoom() {
 
 <template>
   <main class="page home">
+    <div class="home-top"><ThemeToggle /></div>
     <h1>Game Rooms</h1>
     <p class="lede">Make a room, share the link, and play together. No accounts, nothing saved.</p>
 
@@ -61,6 +63,12 @@ function joinRoom() {
 </template>
 
 <style scoped>
+.home-top {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+}
+
 .home {
   max-width: 26rem;
   padding-top: 18vh;
