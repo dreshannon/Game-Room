@@ -1,15 +1,15 @@
-import { soundOn } from '../../useTurnAlert'
+import { gameSoundsOn } from '../../soundSettings'
 
 /**
  * Small card-table sounds made with the Web Audio API, so there are no files to load.
- * They follow the room's Sound on/off button. Browsers only allow sound after the page
+ * They follow the Game sounds setting in the room's sound menu. Browsers only allow sound after the page
  * has been clicked or tapped, so anything before that stays silent.
  */
 
 let context: AudioContext | null = null
 
 function audio(): AudioContext | null {
-  if (!soundOn.value || typeof window === 'undefined' || !('AudioContext' in window)) return null
+  if (!gameSoundsOn.value || typeof window === 'undefined' || !('AudioContext' in window)) return null
   if (!context) {
     try {
       context = new AudioContext()
@@ -24,7 +24,7 @@ function audio(): AudioContext | null {
 // Wake the audio up on the first tap, so later sounds can play.
 if (typeof window !== 'undefined') {
   const unlock = () => {
-    if (soundOn.value) audio()
+    if (gameSoundsOn.value) audio()
   }
   window.addEventListener('pointerdown', unlock, { passive: true })
   window.addEventListener('keydown', unlock)

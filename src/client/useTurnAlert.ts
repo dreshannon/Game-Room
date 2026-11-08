@@ -1,20 +1,8 @@
-import { onBeforeUnmount, ref, watch, type Ref } from 'vue'
-
-const SOUND_KEY = 'turnSound'
-
-function readSoundSetting() {
-  try {
-    return localStorage.getItem(SOUND_KEY) !== 'off'
-  } catch {
-    return true
-  }
-}
-
-/** The room's sound setting, shared with the games' own sound effects. */
-export const soundOn = ref(readSoundSetting())
+import { onBeforeUnmount, watch, type Ref } from 'vue'
+import { turnAlertsOn } from './soundSettings'
 
 /**
- * Tells a player when it becomes their turn: a chime if sound is on, and a flashing tab
+ * Tells a player when it becomes their turn: a chime if turn alerts are on, and a flashing tab
  * title (plus a buzz on phones that support it) while they're looking at another tab.
  */
 export function useTurnAlert(isYourTurn: Ref<boolean>) {
@@ -30,7 +18,7 @@ export function useTurnAlert(isYourTurn: Ref<boolean>) {
   window.addEventListener('pointerdown', unlockAudio, { once: true })
 
   function chime() {
-    if (!soundOn.value || !audio || audio.state !== 'running') return
+    if (!turnAlertsOn.value || !audio || audio.state !== 'running') return
     const now = audio.currentTime
     for (const [offset, frequency] of [
       [0, 660],
@@ -79,22 +67,10 @@ export function useTurnAlert(isYourTurn: Ref<boolean>) {
     }
   })
 
-  function toggleSound() {
-    soundOn.value = !soundOn.value
-    unlockAudio()
-    try {
-      localStorage.setItem(SOUND_KEY, soundOn.value ? 'on' : 'off')
-    } catch {
-      // The setting just won't be remembered.
-    }
-  }
-
   onBeforeUnmount(() => {
     stopFlashing()
     document.removeEventListener('visibilitychange', onVisibilityChange)
     window.removeEventListener('pointerdown', unlockAudio)
     void audio?.close()
   })
-
-  return { soundOn, toggleSound }
 }
