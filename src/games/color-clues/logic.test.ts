@@ -18,7 +18,7 @@ function firstClue(state: ColorCluesState, cell = state.card[0]!) {
 }
 
 function secondClue(state: ColorCluesState) {
-  return colorClues.applyMove(state, state.giverId, { type: 'secondClue', words: 'deep water' })
+  return colorClues.applyMove(state, state.giverId, { type: 'secondClue', words: 'still water' })
 }
 
 const place = (state: ColorCluesState, player: string, cell: number) =>
@@ -138,6 +138,29 @@ describe('clues', () => {
     const state = place(place(firstClue(setup()), 'b', 0), 'c', 1)
     expect(() => colorClues.applyMove(state, 'a', { type: 'secondClue', words })).toThrow(MoveError)
   })
+
+  it.each(['red', 'Bright', 'dark', 'blue-green', 'deep sea', 'GREY', 'shade'])(
+    'rejects the color word in %j',
+    (words) => {
+      const state = place(place(firstClue(setup()), 'b', 0), 'c', 1)
+      expect(() => colorClues.applyMove(state, 'a', { type: 'secondClue', words })).toThrow('describes a color')
+    },
+  )
+
+  it('rejects a color word as the first clue', () => {
+    const state = setup()
+    expect(() =>
+      colorClues.applyMove(state, 'a', { type: 'firstClue', cell: state.card[0], word: 'Pink' }),
+    ).toThrow('“Pink” describes a color')
+  })
+
+  it.each(['blackberry', 'reddish', 'teal', 'redwood', 'shadow', 'lightning', 'ruby', 'pumpkin'])(
+    'allows %j',
+    (words) => {
+      const state = place(place(firstClue(setup()), 'b', 0), 'c', 1)
+      expect(colorClues.applyMove(state, 'a', { type: 'secondClue', words }).secondClue).toBe(words)
+    },
+  )
 
   it.each(['stormy', 'stormy sky'])('accepts %j as a second clue', (words) => {
     const state = place(place(firstClue(setup()), 'b', 0), 'c', 1)

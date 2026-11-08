@@ -1,4 +1,5 @@
 import { MoveError, type Game } from '../types'
+import { findBannedWord } from './bannedWords'
 
 export const COLUMNS = 30
 export const ROWS = 16
@@ -45,6 +46,8 @@ export interface ColorCluesView {
   round: number
   phase: Phase
   turnPlayerId: string | null
+  /** Who still has to guess this phase, in turn order. */
+  queue: string[]
   /** The clue-giver's card. Null for everyone else. */
   card: number[] | null
   /** Known to the clue-giver, and to everyone at reveal. */
@@ -90,7 +93,7 @@ function shuffledCells() {
 }
 
 /** Players after the clue-giver, in seating order. */
-function guessersAfter(order: string[], giverId: string) {
+export function guessersAfter(order: string[], giverId: string) {
   const giverIndex = order.indexOf(giverId)
   return [...order.slice(giverIndex + 1), ...order.slice(0, giverIndex)]
 }
@@ -150,6 +153,10 @@ function validateWords(words: string[], maxWords: number) {
   }
   if (words.some((word) => word.length > MAX_WORD_LENGTH)) {
     throw new MoveError(`Each word can be up to ${MAX_WORD_LENGTH} letters.`)
+  }
+  const banned = findBannedWord(words)
+  if (banned) {
+    throw new MoveError(`“${banned}” describes a color. Clues have to name things, not colors or shades.`)
   }
 }
 
@@ -258,6 +265,7 @@ export const colorClues: Game<ColorCluesState, ColorCluesView> = {
       round: state.round,
       phase: state.phase,
       turnPlayerId: state.queue[0] ?? null,
+      queue: state.queue,
       card: isGiver ? state.card : null,
       target: isGiver || state.phase === 'reveal' ? state.target : null,
       firstClue: state.firstClue,

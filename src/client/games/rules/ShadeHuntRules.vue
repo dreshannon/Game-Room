@@ -6,6 +6,7 @@
     <li>One player is the clue-giver. They get a card with four colors and secretly pick one.</li>
     <li>They give a one-word clue. Going around in order, everyone else places a token on the space they think it is.</li>
     <li>The clue-giver gives a second clue of one or two words. In reverse order, everyone places a second token.</li>
+    <li>Clues have to name things, not colors. Color names (like red or blue) and shade words (like pale or bright) aren’t allowed.</li>
     <li>Only one token can be on a space, and tokens can’t be moved once placed.</li>
     <li>The answer is revealed with a 3×3 box around it, and points are scored.</li>
   </ol>
