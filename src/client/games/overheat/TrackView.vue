@@ -84,6 +84,8 @@ const scene = computed(() => {
       ...corner,
       line: across(distance, 3),
       sign: { x: point.x + point.ty * outside, y: point.y - point.tx * outside },
+      // Back along the track from the sign, the way cars arrive, so it stays inside the picture.
+      before: { x: point.x + point.ty * outside - point.tx * 40, y: point.y - point.tx * outside - point.ty * 40 },
       kerb: toPath(stretch(distance - 2.5 * l.spaceLength, distance + 1.5 * l.spaceLength), false),
     }
   })
@@ -203,7 +205,7 @@ const nextCornerSign = computed(() => {
   const next = props.nextCorner
   const corner = next && scene.value.corners.find((c) => c.space === next.space)
   // Counts the tiles in between, so 0 means you're on the tile right before the corner.
-  return corner ? { ...corner.sign, distance: next.distance - 1 } : null
+  return corner ? { ...corner.sign, pill: corner.before, distance: next.distance - 1 } : null
 })
 </script>
 
@@ -272,7 +274,7 @@ const nextCornerSign = computed(() => {
 
     <g v-if="nextCornerSign" class="next-corner" aria-hidden="true">
       <circle :cx="nextCornerSign.x" :cy="nextCornerSign.y" r="21" class="next-ring" />
-      <g :transform="`translate(${nextCornerSign.x + 24} ${nextCornerSign.y - 24})`">
+      <g :transform="`translate(${nextCornerSign.pill.x} ${nextCornerSign.pill.y})`">
         <rect x="-21" y="-15" width="42" height="30" rx="15" class="next-pill" />
         <text class="next-text">{{ nextCornerSign.distance }}</text>
       </g>

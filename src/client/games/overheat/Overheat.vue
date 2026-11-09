@@ -12,6 +12,7 @@ import CardStack from './CardStack.vue'
 import GearShifter from './GearShifter.vue'
 import RaceCard from './RaceCard.vue'
 import TrackView, { type TrackCar } from './TrackView.vue'
+import TurnSteps from './TurnSteps.vue'
 
 const props = defineProps<{
   view: OverheatView
@@ -151,6 +152,11 @@ const cornerCost = computed(() => {
   return { crossed, cost, spin: cost > car.engine }
 })
 
+const stepDriver = computed(() => {
+  const car = props.view.cars.find((c) => c.id === currentId.value)
+  return car ? { name: car.id === props.you ? 'You' : nameOf(car.id), color: car.color } : null
+})
+
 // ---- Status ----
 
 const status = computed(() => {
@@ -241,6 +247,13 @@ watch(
         <p v-if="flash" :key="flash.seq" class="flash" :class="flash.kind">{{ describe(flash) }}</p>
       </Transition>
     </div>
+
+    <TurnSteps
+      :phase="view.phase"
+      :step="view.current?.step ?? null"
+      :driver="stepDriver"
+      :you-discarding="!!me?.needsDiscard && currentId !== you"
+    />
 
     <p class="status" aria-live="polite">{{ status }}</p>
 
