@@ -300,3 +300,68 @@ describe('moves from outsiders', () => {
     expect(() => colorClues.applyMove(setup(), 'a', null)).toThrow(MoveError)
   })
 })
+
+describe('word limits', () => {
+  it('does not let underscores join words into one', () => {
+    const state = setup()
+    const clue = (word: string) =>
+      colorClues.applyMove(state, state.giverId, { type: 'firstClue', cell: state.card[0]!, word })
+    expect(() => clue('ice_cream')).toThrow('exactly one word')
+    expect(() => clue('ice__cream_cone')).toThrow('exactly one word')
+    expect(clue('_ocean_').firstClue).toBe('ocean')
+  })
+
+  it('counts underscores as spaces in the second clue', () => {
+    const state = place(place(firstClue(setup()), 'b', 0), 'c', 1)
+    expect(() => colorClues.applyMove(state, 'a', { type: 'secondClue', words: 'sea_side_town' })).toThrow(
+      '1 to 2 words',
+    )
+    expect(colorClues.applyMove(state, 'a', { type: 'secondClue', words: 'sea_side' }).secondClue).toBe('sea side')
+  })
+})
+
+describe('player colors', () => {
+  it('uses the colors players picked', () => {
+    const state = colorClues.setup(PLAYERS, { targetScore: 50 }, { teams: {}, colors: { a: 5, b: 2, c: 7 } })
+    expect(state.seats).toEqual({ a: 5, b: 2, c: 7 })
+  })
+
+  it('changes color mid-game', () => {
+    expect(colorClues.recolor!(setup(), 'b', 6).seats.b).toBe(6)
+  })
+})
+
+describe('players walking in', () => {
+  it('seats them just before the clue-giver, so they give a clue last', () => {
+    const state = colorClues.onPlayerJoin!(setup(), 'd', 4)!
+    expect(state.order).toEqual(['d', 'a', 'b', 'c'])
+    expect(state.seats.d).toBe(4)
+    expect(state.scores.d).toBe(0)
+    expect(firstClue(state).queue).toEqual(['b', 'c', 'd'])
+  })
+
+  it('joins the guessing queue at the end mid-guess', () => {
+    const state = colorClues.onPlayerJoin!(firstClue(setup()), 'd', 4)!
+    expect(state.queue).toEqual(['b', 'c', 'd'])
+    const done = place(place(place(state, 'b', 0), 'c', 1), 'd', 2)
+    expect(done.phase).toBe('secondClue')
+  })
+
+  it('keeps the next clue-giver the same', () => {
+    let state = colorClues.onPlayerJoin!(setup(), 'd', 4)!
+    state = place(place(place(firstClue(state), 'b', 0), 'c', 1), 'd', 2)
+    state = secondClue(state)
+    state = place(place(place(state, 'd', 3), 'c', 4), 'b', 5)
+    expect(state.phase).toBe('reveal')
+    state = colorClues.applyMove(state, 'a', { type: 'nextRound', round: 1 })
+    expect(state.giverId).toBe('b')
+  })
+
+  it('adds them to the round scores during reveal', () => {
+    let state = place(place(firstClue(setup()), 'b', 0), 'c', 1)
+    state = place(place(secondClue(state), 'c', 2), 'b', 3)
+    state = colorClues.onPlayerJoin!(state, 'd', 4)!
+    expect(state.roundScores?.d).toBe(0)
+    expect(colorClues.applyMove(state, 'a', { type: 'nextRound', round: 1 }).giverId).toBe('b')
+  })
+})

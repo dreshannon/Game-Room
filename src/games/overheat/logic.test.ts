@@ -145,7 +145,7 @@ describe('moving', () => {
     // The leader is in 2nd gear with no Heat in hand, so only Boost is left to decide.
     expect(state.order[state.current]).toBe('front')
     expect(driver(state, 'front').pos).toBe(clearStart + 5)
-    expect(overheat.viewFor(state, 'front').you?.react).toEqual({ cooldown: 0, boost: true, adrenaline: false })
+    expect(overheat.viewFor(state, 'front').you?.react).toEqual({ boost: true, adrenaline: false })
   })
 
   it('turns each Stress card into the next speed card in the deck', () => {
@@ -176,18 +176,18 @@ describe('moving', () => {
 })
 
 describe('reacting', () => {
-  it('cools Heat from hand back to the engine: 3 in 1st gear, 1 in 2nd', () => {
+  it('cools Heat from hand back to the engine by itself: 3 in 1st gear, 1 in 2nd', () => {
     let state = race([
       { id: 'a', pos: clearStart + 6, hand: [...heat(4), ...speed(1, 1, 1)] },
       { id: 'b', pos: clearStart, hand: [...heat(4), ...speed(1, 1, 1)] },
     ])
     driver(state, 'b').gear = 2
     state = plan(plan(state, 'a', 1), 'b', 2)
-    state = overheat.applyMove(state, 'a', { type: 'cooldown' })
     expect(driver(state, 'a').engine).toHaveLength(9)
+    expect(driver(state, 'a').hand.filter((c) => c.kind === 'heat')).toHaveLength(1)
     state = endReact(state, 'a')
     // b is last, so Adrenaline adds 1 cooldown.
-    expect(overheat.viewFor(state, 'b').you?.react?.cooldown).toBe(2)
+    expect(driver(state, 'b').engine).toHaveLength(8)
   })
 
   it('boosts by paying 1 Heat and flipping the next speed card', () => {
@@ -325,12 +325,14 @@ describe('a clogged hand', () => {
 describe('discarding and the next round', () => {
   it('lets drivers discard while others move, then starts the next round', () => {
     let state = race([
-      { id: 'a', pos: clearStart + 6, hand: [...heat(1), card('stress'), ...speed(1, 1, 1, 1, 1)] },
+      { id: 'a', pos: clearStart + 6, hand: [card('stress'), ...speed(1, 1, 1, 1, 1, 1)] },
       { id: 'b', pos: clearStart },
     ])
     state = plan(plan(state, 'a', 1), 'b', 1)
     state = endReact(state, 'a')
     const a = driver(state, 'a')
+    // Heat drawn after cooling down stays in hand and can't be discarded.
+    a.hand.unshift(card('heat'))
     expect(a.needsDiscard).toBe(true)
     expect(() => discard(state, 'a', [a.hand[0]!.id])).toThrow('cannot be discarded')
     state = discard(state, 'a', [a.hand[2]!.id, a.hand[3]!.id])

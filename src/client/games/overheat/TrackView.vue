@@ -17,6 +17,8 @@ const props = defineProps<{
   /** Zooms in on this car, if set. */
   followId: string | null
   highlightId: string | null
+  /** Your next corner. `distance` is the move that crosses it, so the badge shows one less. */
+  nextCorner: { space: number; distance: number } | null
 }>()
 
 const layout = computed(() => layoutTrack(getTrack(props.trackId)))
@@ -196,6 +198,13 @@ const viewBox = computed(() => {
 })
 
 const hovered = ref<string | null>(null)
+
+const nextCornerSign = computed(() => {
+  const next = props.nextCorner
+  const corner = next && scene.value.corners.find((c) => c.space === next.space)
+  // Counts the tiles in between, so 0 means you're on the tile right before the corner.
+  return corner ? { ...corner.sign, distance: next.distance - 1 } : null
+})
 </script>
 
 <template>
@@ -261,6 +270,14 @@ const hovered = ref<string | null>(null)
       <text :x="corner.sign.x" :y="corner.sign.y" class="limit">{{ corner.limit }}</text>
     </g>
 
+    <g v-if="nextCornerSign" class="next-corner" aria-hidden="true">
+      <circle :cx="nextCornerSign.x" :cy="nextCornerSign.y" r="21" class="next-ring" />
+      <g :transform="`translate(${nextCornerSign.x + 24} ${nextCornerSign.y - 24})`">
+        <rect x="-21" y="-15" width="42" height="30" rx="15" class="next-pill" />
+        <text class="next-text">{{ nextCornerSign.distance }}</text>
+      </g>
+    </g>
+
     <g
       v-for="car in drawn"
       :key="car.id"
@@ -295,7 +312,8 @@ const hovered = ref<string | null>(null)
   display: block;
   width: 100%;
   height: auto;
-  max-height: 72vh;
+  /* Short enough that the cards below stay in view without much scrolling. */
+  max-height: min(52vh, 34rem);
   border-radius: var(--radius);
   background: #333;
   touch-action: manipulation;
@@ -330,6 +348,27 @@ const hovered = ref<string | null>(null)
   }
 }
 
+.next-ring {
+  fill: none;
+  stroke: #ffd60a;
+  stroke-width: 3;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.next-pill {
+  fill: #ffd60a;
+  stroke: #111;
+  stroke-width: 1.5;
+}
+
+.next-text {
+  fill: #111;
+  font-size: 20px;
+  font-weight: 800;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
 .streaks line {
   stroke: #fff;
   stroke-width: 2;
@@ -349,6 +388,7 @@ const hovered = ref<string | null>(null)
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .next-ring,
   .halo {
     animation: none;
   }

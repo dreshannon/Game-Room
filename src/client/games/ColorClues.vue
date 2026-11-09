@@ -5,10 +5,13 @@ import { BOARD_COLORS } from '../../games/color-clues/colors'
 import {
   COLUMNS,
   ROWS,
+  TOKEN_COLORS,
   cellLabel,
   distance,
   guessersAfter,
   guesserPoints,
+  splitWords,
+  wordCountProblem,
   type ColorCluesMove,
   type ColorCluesView,
 } from '../../games/color-clues/logic'
@@ -23,10 +26,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{ move: [move: ColorCluesMove] }>()
 
-// Chosen to stand out from each other, and outlined so they show on any board color.
-const TOKEN_COLORS = ['#111111', '#ffffff', '#d7263d', '#1b4fd8', '#0b8a3e', '#7b2cbf', '#f28c00', '#00a6a6']
-const TOKEN_TEXT = ['#ffffff', '#111111', '#ffffff', '#ffffff', '#ffffff', '#ffffff', '#111111', '#111111']
-
 const ROW_LABELS = Array.from({ length: ROWS }, (_, row) => String.fromCharCode(65 + row))
 const rowCells = (row: number) => Array.from({ length: COLUMNS }, (_, column) => row * COLUMNS + column)
 
@@ -37,7 +36,10 @@ const clueText = ref('')
 const nameOf = (id: string) => props.players.find((player) => player.id === id)?.name ?? 'Someone'
 const seatOf = (id: string) => props.view.seats[id] ?? 0
 const initialOf = (id: string) => Array.from(nameOf(id))[0]?.toUpperCase() ?? '?'
-const tokenColor = (id: string) => ({ background: TOKEN_COLORS[seatOf(id)], color: TOKEN_TEXT[seatOf(id)] })
+const tokenColor = (id: string) => {
+  const swatch = TOKEN_COLORS[seatOf(id)] ?? TOKEN_COLORS[0]!
+  return { background: swatch.fill, color: swatch.text }
+}
 
 const isGiver = computed(() => props.view.giverId === props.you)
 const isYourTurn = computed(() => props.view.turnPlayerId === props.you)
@@ -55,7 +57,20 @@ const canPlaceSelected = computed(
     isYourTurn.value && selectedCell.value !== null && !tokenByCell.value.has(selectedCell.value),
 )
 
-const bannedWord = computed(() => findBannedWord(clueText.value.trim().split(/\s+/).filter(Boolean)))
+const clueWords = computed(() => splitWords(clueText.value))
+const bannedWord = computed(() => findBannedWord(clueWords.value))
+/** Shown once they've typed too many words, not while the box is still empty. */
+const tooManyWords = computed(() => {
+  const maxWords = props.view.phase === 'firstClue' ? 1 : 2
+  return clueWords.value.length > maxWords ? wordCountProblem(clueWords.value, maxWords) : null
+})
+const clueProblem = computed(() =>
+  tooManyWords.value
+    ? `${tooManyWords.value}${clueText.value.includes('_') ? ' Underscores count as spaces.' : ''}`
+    : bannedWord.value
+      ? `“${bannedWord.value}” describes a color. Name a thing instead, like an object, food or place.`
+      : null,
+)
 
 /** Everyone guessing this phase, in turn order, with where each one is up to. */
 const guessOrder = computed(() => {
@@ -63,7 +78,9 @@ const guessOrder = computed(() => {
   if (phase !== 'firstGuess' && phase !== 'secondGuess') return []
   const guessers = guessersAfter(order, giverId)
   if (phase === 'secondGuess') guessers.reverse()
-  return guessers.map((id) => ({
+  // Someone who walked in mid-phase guesses last, so follow the queue for who's still to go.
+  const done = guessers.filter((id) => !queue.includes(id))
+  return [...done, ...queue].map((id) => ({
     id,
     state: queue[0] === id ? 'current' : queue.includes(id) ? 'waiting' : 'done',
   }))
@@ -238,7 +255,10 @@ function cellClick(cell: number) {
     if (props.view.card?.includes(cell)) chosenColor.value = cell
     return
   }
-  if (isYourTurn.value && !tokenByCell.value.has(cell)) selectedCell.value = cell
+  if (!isYourTurn.value || tokenByCell.value.has(cell)) return
+  // Clicking the chosen space again places the token.
+  if (selectedCell.value === cell) placeToken()
+  else selectedCell.value = cell
 }
 
 function isClickable(cell: number) {
@@ -352,20 +372,18 @@ watch(tokenByCell, (tokens) => {
           maxlength="60"
           autocomplete="off"
           :aria-label="view.phase === 'firstClue' ? 'One-word clue' : 'Second clue, one or two words'"
-          :aria-describedby="bannedWord ? 'banned-word' : undefined"
+          :aria-describedby="clueProblem ? 'clue-problem' : undefined"
           :placeholder="view.phase === 'firstClue' ? 'One-word clue' : 'One or two words'"
         />
         <button
           class="primary"
           type="submit"
-          :disabled="!clueText.trim() || !!bannedWord || (view.phase === 'firstClue' && chosenColor === null)"
+          :disabled="clueWords.length === 0 || !!clueProblem || (view.phase === 'firstClue' && chosenColor === null)"
         >
           Give clue
         </button>
       </div>
-      <p v-if="bannedWord" id="banned-word" class="warning">
-        “{{ bannedWord }}” describes a color. Name a thing instead, like an object, food or place.
-      </p>
+      <p v-if="clueProblem" id="clue-problem" class="warning">{{ clueProblem }}</p>
       <p v-else class="muted small">No color names or shade words like “pale” or “bright”.</p>
     </form>
 
@@ -378,7 +396,7 @@ watch(tokenByCell, (tokens) => {
         <span class="big-swatch" :style="{ background: BOARD_COLORS[selectedCell] }"></span>
         <span class="pick">
           <strong>{{ cellLabel(selectedCell) }}</strong>
-          <span class="muted small">for “{{ view.secondClue ?? view.firstClue }}”</span>
+          <span class="muted small">for “{{ view.secondClue ?? view.firstClue }}” · pick it again to place it</span>
         </span>
       </template>
       <button class="primary" :disabled="!canPlaceSelected" @click="placeToken">Place token</button>

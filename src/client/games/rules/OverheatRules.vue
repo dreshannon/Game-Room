@@ -11,7 +11,7 @@
   <ol>
     <li><strong>Everyone picks at once:</strong> a gear and that many cards (gear 3 means 3 cards). Changing by one gear is free. Changing by two costs 1 Heat. Heat cards can’t be played.</li>
     <li><strong>Cars move one at a time, leader first.</strong> You move exactly the total of your cards. A <strong>Stress</strong> card turns into the next 1–4 speed card from your deck.</li>
-    <li><strong>React:</strong> <strong>Boost</strong> once by paying 1 Heat to flip the next 1–4 speed card and move that far. <strong>Cool down</strong> in 1st gear (3 Heat) or 2nd gear (1 Heat) to move Heat cards from your hand back to your engine.</li>
+    <li><strong>React:</strong> <strong>Boost</strong> once by paying 1 Heat to flip the next 1–4 speed card and move that far. In 1st gear (3 Heat) or 2nd gear (1 Heat), you <strong>cool down</strong> automatically: Heat cards in your hand go back to your engine.</li>
     <li><strong>Adrenaline:</strong> the last car each round (the last two, with 5 or more cars) may move 1 extra space and cool down 1 more.</li>
     <li><strong>Slipstream:</strong> if you end beside a car or right behind one, you may move 2 more spaces.</li>
     <li><strong>Corners:</strong> for each corner line you crossed, pay 1 Heat for each point your speed was over its limit. Slipstream doesn’t count toward your speed.</li>

@@ -39,6 +39,17 @@ export interface MoveContext {
 export interface SetupContext {
   /** Each player's team number, when the game is played in teams. */
   teams: Record<string, number>
+  /** Each player's color, as an index into `playerColors`, for games that have them. */
+  colors?: Record<string, number>
+}
+
+/** A swatch players can pick in the lobby. */
+export interface PlayerColor {
+  name: string
+  /** The color itself. */
+  fill: string
+  /** Text that reads well on top of it. */
+  text: string
 }
 
 /**
@@ -57,6 +68,11 @@ export interface Game<State = unknown, View = unknown> {
    * and everyone else in the room watches.
    */
   seats?: number
+  /**
+   * Colors players can pick for themselves. The room gives each player a different one,
+   * and passes them to `setup` and `recolor`.
+   */
+  playerColors?: PlayerColor[]
   setup(playerIds: string[], options: GameOptionValues, context?: SetupContext): State
   /** `move` comes straight from the client, so it must be validated. */
   applyMove(state: State, playerId: string, move: unknown, context?: MoveContext): State
@@ -76,6 +92,13 @@ export interface Game<State = unknown, View = unknown> {
    * or null to end the game. Without this, any player leaving ends the game.
    */
   onPlayerLeave?(state: State, playerId: string): State | null
+  /**
+   * Lets someone who arrives mid-game play straight away. Return the state with them in it,
+   * or null to leave them watching. `color` is set for games with `playerColors`.
+   */
+  onPlayerJoin?(state: State, playerId: string, color: number): State | null
+  /** Called when a player picks a new color during a game. */
+  recolor?(state: State, playerId: string, color: number): State
 }
 
 export const optionIsShown = (option: GameOption, values: GameOptionValues) =>

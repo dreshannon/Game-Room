@@ -71,6 +71,16 @@ const activeView = computed(() =>
 const rulesGame = computed(() => getGame(state.value?.game?.gameId ?? state.value?.selectedGameId ?? ''))
 const rules = computed(() => (rulesGame.value ? gameViews[rulesGame.value.id]?.rules : undefined))
 
+// Colors belong to the game being played, or otherwise the one picked in the lobby.
+const palette = computed(() => rulesGame.value?.playerColors ?? null)
+const swatchOf = (player: PublicPlayer) =>
+  player.color !== null ? (palette.value?.[player.color] ?? null) : null
+const yourColor = computed(
+  () => state.value?.players.find((player) => player.id === state.value?.you)?.color ?? null,
+)
+const colorHolder = (color: number) =>
+  state.value?.players.find((player) => player.color === color && player.id !== state.value?.you) ?? null
+
 const isYourTurn = computed(() => {
   const game = state.value?.game
   return !!game && !game.result && !!state.value?.you && game.waitingOn.includes(state.value.you)
@@ -369,7 +379,14 @@ function endGame() {
                 <button class="primary small-button" type="submit" :disabled="!newName.trim()">Save</button>
                 <button class="small-button" type="button" @click="renaming = false">Cancel</button>
               </form>
-              <span v-else class="player-name">{{ player.name }}</span>
+              <span
+                v-if="palette && !(player.id === state.you && renaming)"
+                class="color-dot"
+                :class="{ unset: !swatchOf(player) }"
+                :style="swatchOf(player) ? { background: swatchOf(player)!.fill } : undefined"
+                :title="swatchOf(player)?.name ?? 'No color yet'"
+              ></span>
+              <span v-if="!(player.id === state.you && renaming)" class="player-name">{{ player.name }}</span>
               <span v-if="player.id === state.you" class="tag">you</span>
               <button
                 v-if="player.id === state.you && !renaming"
@@ -390,6 +407,29 @@ function endGame() {
               </button>
             </li>
           </ul>
+
+          <fieldset v-if="palette" class="color-picker">
+            <legend>Your color</legend>
+            <div class="swatches">
+              <button
+                v-for="(swatch, index) in palette"
+                :key="swatch.name"
+                type="button"
+                class="swatch"
+                :class="{ chosen: yourColor === index }"
+                :style="{ background: swatch.fill, color: swatch.text }"
+                :disabled="!!colorHolder(index)"
+                :aria-pressed="yourColor === index"
+                :aria-label="colorHolder(index) ? `${swatch.name}, taken by ${colorHolder(index)!.name}` : swatch.name"
+                :title="colorHolder(index) ? `${swatch.name} (${colorHolder(index)!.name})` : swatch.name"
+                @click="send({ type: 'setColor', color: index })"
+              >
+                <span v-if="yourColor === index" aria-hidden="true">✓</span>
+                <span v-else-if="colorHolder(index)" aria-hidden="true">{{ Array.from(colorHolder(index)!.name)[0]?.toUpperCase() }}</span>
+              </button>
+            </div>
+            <p v-if="yourColor === null" class="muted small-note">Pick one, or you’ll get a free one when the game starts.</p>
+          </fieldset>
         </aside>
       </div>
     </template>
@@ -600,6 +640,67 @@ function endGame() {
 
 .away .player-name {
   opacity: 0.55;
+}
+
+.color-dot {
+  flex: none;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 1.5px var(--surface),
+    0 0 0 3px var(--line);
+}
+
+.color-dot.unset {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--line);
+}
+
+.color-picker {
+  margin: 1.1rem 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.color-picker legend {
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 2px solid var(--line);
+  border-radius: 50%;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.swatch.chosen {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--ink);
+}
+
+.swatch:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.small-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
 }
 
 .small-button {

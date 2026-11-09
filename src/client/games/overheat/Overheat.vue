@@ -128,16 +128,18 @@ const sortedHand = computed(() => {
 
 /** Corner lines ahead of a position, with how far away they are. */
 function cornersAhead(pos: number, within: number) {
-  const out: { distance: number; limit: number }[] = []
+  const out: { distance: number; limit: number; space: number }[] = []
   for (let d = 1; d <= within && pos + d < finishPos.value; d++) {
     const space = (((pos + d) % props.view.spaces) + props.view.spaces) % props.view.spaces
     const corner = corners.value.find((c) => c.space === space)
-    if (corner) out.push({ distance: d, limit: corner.limit })
+    if (corner) out.push({ distance: d, limit: corner.limit, space })
   }
   return out
 }
 
-const upcoming = computed(() => (me.value ? cornersAhead(me.value.pos, 18).slice(0, 2) : []))
+const upcoming = computed(() =>
+  me.value && me.value.place === null ? cornersAhead(me.value.pos, props.view.spaces).slice(0, 2) : [],
+)
 
 /** The Heat this turn's corners will cost at the current speed. */
 const cornerCost = computed(() => {
@@ -163,7 +165,7 @@ const status = computed(() => {
     }
     return 'Pick a gear, then that many cards.'
   }
-  if (yourStep.value === 'react') return 'Your car moved. Boost, cool down, or carry on.'
+  if (yourStep.value === 'react') return 'Your car moved. Boost, or carry on.'
   if (yourStep.value === 'slipstream') return 'You’re right behind a car. Take the slipstream?'
   if (me.value?.needsDiscard) return 'Discard any cards you don’t want, then draw back up to 7.'
   if (currentId.value) return `${nameOf(currentId.value)} is driving…`
@@ -228,7 +230,13 @@ watch(
     </div>
 
     <div class="stage">
-      <TrackView :track-id="view.trackId" :cars="trackCars" :follow-id="follow ? you : null" :highlight-id="currentId" />
+      <TrackView
+        :track-id="view.trackId"
+        :cars="trackCars"
+        :follow-id="follow ? you : null"
+        :highlight-id="currentId"
+        :next-corner="upcoming[0] ?? null"
+      />
       <Transition name="flash">
         <p v-if="flash" :key="flash.seq" class="flash" :class="flash.kind">{{ describe(flash) }}</p>
       </Transition>
@@ -259,10 +267,11 @@ watch(
           </div>
         </div>
 
-        <p v-if="upcoming.length && view.phase === 'plan'" class="muted corners-ahead">
+        <p v-if="upcoming.length" class="muted corners-ahead">
           Next corner{{ upcoming.length > 1 ? 's' : '' }}:
           <span v-for="(corner, i) in upcoming" :key="i" class="corner-chip">
-            limit <strong>{{ corner.limit }}</strong> in {{ corner.distance }}
+            <!-- Tiles before the corner, matching the badge on the track. -->
+            limit <strong>{{ corner.limit }}</strong> in {{ corner.distance - 1 }}
           </span>
         </p>
 
@@ -318,9 +327,6 @@ watch(
           </p>
           <div class="row actions">
             <button :disabled="!view.you.react.boost" @click="emit('move', { type: 'boost' })">Boost (1 Heat)</button>
-            <button :disabled="!view.you.react.cooldown" @click="emit('move', { type: 'cooldown' })">
-              Cool down {{ view.you.react.cooldown || '' }}
-            </button>
             <button v-if="view.you.react.adrenaline" @click="emit('move', { type: 'adrenaline' })">
               Adrenaline +1
             </button>

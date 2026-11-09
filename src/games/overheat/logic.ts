@@ -1,4 +1,4 @@
-import { MoveError, type Game } from '../types'
+import { MoveError, type Game, type PlayerColor } from '../types'
 import { TRACKS, cornersOf, getTrack, type Corner } from './tracks'
 
 export const HAND_SIZE = 7
@@ -10,7 +10,16 @@ export const SLIPSTREAM_SPACES = 2
 export const MAX_CARS = 8
 /** From this many cars, the last two cars each round get Adrenaline. */
 export const TWO_ADRENALINE_FROM = 5
-export const CAR_COLORS = ['#e63946', '#3a86ff', '#ffbe0b', '#06d6a0', '#9b5de5', '#f77f00', '#ff70a6', '#e9ecef']
+export const CAR_COLORS: PlayerColor[] = [
+  { name: 'Red', fill: '#e63946', text: '#ffffff' },
+  { name: 'Blue', fill: '#3a86ff', text: '#ffffff' },
+  { name: 'Yellow', fill: '#ffbe0b', text: '#111111' },
+  { name: 'Green', fill: '#06d6a0', text: '#111111' },
+  { name: 'Purple', fill: '#9b5de5', text: '#ffffff' },
+  { name: 'Orange', fill: '#f77f00', text: '#111111' },
+  { name: 'Pink', fill: '#ff70a6', text: '#111111' },
+  { name: 'Silver', fill: '#e9ecef', text: '#111111' },
+]
 
 export type CardKind = 'speed' | 'upgrade' | 'heat' | 'stress'
 
@@ -130,7 +139,6 @@ export interface CarView {
 }
 
 export interface ReactOptions {
-  cooldown: number
   boost: boolean
   adrenaline: boolean
 }
@@ -157,7 +165,6 @@ export interface OverheatView {
 export type OverheatMove =
   | { type: 'plan'; gear: number; cards: number[] }
   | { type: 'unplan' }
-  | { type: 'cooldown' }
   | { type: 'boost' }
   | { type: 'adrenaline' }
   | { type: 'endReact' }
@@ -260,16 +267,25 @@ const raceOrder = (drivers: Driver[]) =>
 
 export function reactOptions(driver: Driver): ReactOptions {
   const turn = driver.turn
-  if (!turn || turn.step !== 'react' || turn.clogged) return { cooldown: 0, boost: false, adrenaline: false }
-  const heatInHand = driver.hand.filter((card) => card.kind === 'heat').length
+  if (!turn || turn.step !== 'react' || turn.clogged) return { boost: false, adrenaline: false }
   return {
-    cooldown: Math.min(turn.cooldownLeft, heatInHand),
     boost: !turn.boosted && driver.engine.length > 0,
     adrenaline: turn.adrenaline && !turn.adrenalineUsed,
   }
 }
 
-const hasReactOptions = (options: ReactOptions) => options.cooldown > 0 || options.boost || options.adrenaline
+const hasReactOptions = (options: ReactOptions) => options.boost || options.adrenaline
+
+/** Moves Heat from hand back to the engine. It never hurts, so it happens by itself. */
+function coolDown(state: OverheatState, driver: Driver) {
+  const turn = driver.turn!
+  const heat = driver.hand.filter((card) => card.kind === 'heat').slice(0, turn.cooldownLeft)
+  if (heat.length === 0) return
+  driver.hand = driver.hand.filter((card) => !heat.includes(card))
+  driver.engine.push(...heat)
+  turn.cooldownLeft -= heat.length
+  log(state, { kind: 'cooldown', playerId: driver.id, value: heat.length })
+}
 
 /** Whether a car may take a Slipstream: right beside another car, or right behind one. */
 export function canSlipstream(state: OverheatState, driver: Driver) {
@@ -415,6 +431,7 @@ function advance(state: OverheatState) {
       continue
     }
     if (turn.step === 'react') {
+      coolDown(state, driver)
       if (hasReactOptions(reactOptions(driver))) return
       turn.step = 'slipstream'
     }
@@ -454,7 +471,7 @@ function idList(value: unknown): number[] {
   return value as number[]
 }
 
-function makeDriver(state: OverheatState, id: string, index: number, pos: number, spot: 0 | 1): Driver {
+function makeDriver(state: OverheatState, id: string, color: number, pos: number, spot: 0 | 1): Driver {
   const card = (kind: CardKind, value = 0) => newCard(state, kind, value)
   const deck: Card[] = []
   for (let value = 1; value <= 4; value++) for (let i = 0; i < 3; i++) deck.push(card('speed', value))
@@ -462,7 +479,7 @@ function makeDriver(state: OverheatState, id: string, index: number, pos: number
   for (let i = 0; i < 3; i++) deck.push(card('stress'))
   const driver: Driver = {
     id,
-    color: CAR_COLORS[index % CAR_COLORS.length]!,
+    color: CAR_COLORS[color % CAR_COLORS.length]!.fill,
     pos,
     spot,
     gear: 1,
@@ -486,6 +503,7 @@ export const overheat: Game<OverheatState, OverheatView> = {
   name: 'Overheat',
   minPlayers: 2,
   maxPlayers: MAX_CARS,
+  playerColors: CAR_COLORS,
   options: [
     {
       key: 'track',
@@ -500,7 +518,7 @@ export const overheat: Game<OverheatState, OverheatView> = {
     },
   ],
 
-  setup(playerIds, options) {
+  setup(playerIds, options, context) {
     const track = getTrack(options.track ?? 0)
     const state: OverheatState = {
       trackId: track.id,
@@ -517,11 +535,11 @@ export const overheat: Game<OverheatState, OverheatView> = {
       seq: 0,
       events: [],
     }
-    // Colours follow the room's order. The starting grid is random.
+    // Players pick their colours in the lobby. The starting grid is random.
     const grid = shuffle(playerIds)
     state.drivers = playerIds.map((id, index) => {
       const slot = grid.indexOf(id)
-      return makeDriver(state, id, index, -1 - Math.floor(slot / 2), (slot % 2) as 0 | 1)
+      return makeDriver(state, id, context?.colors?.[id] ?? index, -1 - Math.floor(slot / 2), (slot % 2) as 0 | 1)
     })
     return state
   },
@@ -561,20 +579,6 @@ export const overheat: Game<OverheatState, OverheatView> = {
       case 'unplan': {
         if (state.phase !== 'plan') return original
         driver.plan = null
-        return state
-      }
-
-      case 'cooldown': {
-        const active = currentDriver(state, playerId, 'react')
-        if (!active) throw new MoveError('You can only cool down on your turn.')
-        const count = reactOptions(active).cooldown
-        if (count === 0) throw new MoveError('You have no Heat to cool down.')
-        const heat = active.hand.filter((card) => card.kind === 'heat').slice(0, count)
-        active.hand = active.hand.filter((card) => !heat.includes(card))
-        active.engine.push(...heat)
-        active.turn!.cooldownLeft -= count
-        log(state, { kind: 'cooldown', playerId, value: count })
-        advance(state)
         return state
       }
 
@@ -701,6 +705,12 @@ export const overheat: Game<OverheatState, OverheatView> = {
     const id = state.order[state.current]
     if (id && !waiting.includes(id)) waiting.push(id)
     return waiting
+  },
+
+  recolor(original, playerId, color) {
+    const fill = CAR_COLORS[color]?.fill
+    if (!fill) return original
+    return { ...original, drivers: original.drivers.map((d) => (d.id === playerId ? { ...d, color: fill } : d)) }
   },
 
   onPlayerLeave(original, playerId) {

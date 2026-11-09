@@ -9,6 +9,7 @@ export type ClientMessage =
   | { type: 'selectGame'; gameId: string }
   | { type: 'setOption'; key: string; value: number }
   | { type: 'setTeam'; team: number }
+  | { type: 'setColor'; color: number }
   | { type: 'shuffleTeams' }
   | { type: 'pickPlayer'; playerId: string; picked: boolean }
   | { type: 'start' }
@@ -23,6 +24,8 @@ export interface PublicPlayer {
   connected: boolean
   /** The lobby team they picked, for team games. Null until they pick or are placed. */
   team: number | null
+  /** Their color in games with player colors, as an index into the game's `playerColors`. */
+  color: number | null
 }
 
 export interface ActiveGame {

@@ -1,6 +1,6 @@
 import { Server, type Connection, type WSMessage } from 'partyserver'
 import { defaultOptions, games, getGame } from '../games'
-import { MoveError } from '../games/types'
+import { MoveError, type PlayerColor } from '../games/types'
 import {
   MAX_NAME_LENGTH,
   type ClientMessage,
@@ -25,6 +25,8 @@ interface Player {
   connectionId: string | null
   expiry: ReturnType<typeof setTimeout> | null
   team: number | null
+  /** The name of the color they picked, so it carries over to games with the same color. */
+  color: string | null
 }
 
 interface ActiveGameRecord {
@@ -109,6 +111,8 @@ export class Room extends Server<Env> {
         return this.handleSetOption(connection, player, message.key, message.value)
       case 'setTeam':
         return this.handleSetTeam(connection, player, message.team)
+      case 'setColor':
+        return this.handleSetColor(connection, player, message.color)
       case 'shuffleTeams':
         return this.handleShuffleTeams(connection, player)
       case 'pickPlayer':
@@ -139,22 +143,98 @@ export class Room extends Server<Env> {
       return this.sendError(connection, 'That name is taken in this room.')
     }
 
-    if (existing) {
-      this.takeOverSeat(existing, connection)
-      existing.name = name
+    let player = existing
+    if (player) {
+      this.takeOverSeat(player, connection)
+      player.name = name
     } else {
       if (this.players.size >= MAX_PLAYERS) return this.sendError(connection, 'This room is full.')
-      const player: Player = {
+      player = {
         id: crypto.randomUUID(),
         name,
         token,
         connectionId: connection.id,
         expiry: null,
         team: null,
+        color: null,
       }
       this.players.set(player.id, player)
       this.playerByConnection.set(connection.id, player.id)
       this.hostId ??= player.id
+    }
+    this.seatWalkIn(player)
+    this.broadcastState()
+  }
+
+  /** Puts someone who arrived mid-game into it, for games that allow that. */
+  private seatWalkIn(player: Player) {
+    const game = this.game
+    if (!game || game.playerIds.includes(player.id) || !this.isGameInProgress()) return
+    const definition = getGame(game.gameId)!
+    if (!definition.onPlayerJoin || game.playerIds.length >= definition.maxPlayers) return
+    const color = definition.playerColors
+      ? this.assignColors([...game.playerIds, player.id], definition.playerColors)[player.id]!
+      : 0
+    let next: unknown
+    try {
+      next = definition.onPlayerJoin(game.state, player.id, color)
+    } catch (error) {
+      console.error('Walk-in failed', error)
+      return
+    }
+    if (next === null) return
+    game.state = next
+    game.playerIds = [...game.playerIds, player.id]
+    this.broadcast(serialize({ type: 'notice', message: `${player.name} joined the game.` }))
+  }
+
+  /**
+   * Makes sure each of these players has their own color from the palette, keeping the ones
+   * they picked where possible. Returns everyone's color.
+   */
+  private assignColors(playerIds: string[], palette: PlayerColor[]) {
+    const names = palette.map((swatch) => swatch.name)
+    const seats = playerIds.map((id) => this.players.get(id)).filter((seat): seat is Player => !!seat)
+    const kept = new Set<string>()
+    for (const seat of seats) {
+      if (seat.color !== null && names.includes(seat.color) && !kept.has(seat.color)) kept.add(seat.color)
+      else seat.color = null
+    }
+    for (const seat of seats) {
+      if (seat.color !== null) continue
+      // Prefer a color nobody in the room has picked, then any that's free among these players.
+      const others = new Set(
+        [...this.players.values()].filter((other) => !seats.includes(other)).map((other) => other.color),
+      )
+      const free = names.filter((name) => !kept.has(name))
+      const color = free.find((name) => !others.has(name)) ?? free[0]
+      if (color === undefined) continue
+      for (const other of this.players.values()) if (!seats.includes(other) && other.color === color) other.color = null
+      seat.color = color
+      kept.add(color)
+    }
+    return Object.fromEntries(seats.map((seat) => [seat.id, Math.max(0, names.indexOf(seat.color ?? ''))]))
+  }
+
+  /** Colors for the game being played, or otherwise the one picked in the lobby. */
+  private palette() {
+    return getGame(this.game?.gameId ?? this.selectedGameId)!.playerColors ?? null
+  }
+
+  private handleSetColor(connection: Connection, player: Player, color: unknown) {
+    const definition = getGame(this.game?.gameId ?? this.selectedGameId)!
+    const palette = definition.playerColors
+    if (!palette) return this.sendError(connection, 'This game doesn’t have player colors.')
+    if (typeof color !== 'number' || !Number.isInteger(color) || color < 0 || color >= palette.length) {
+      return this.sendError(connection, 'That color doesn’t exist.')
+    }
+    const name = palette[color]!.name
+    const holder = [...this.players.values()].find((other) => other !== player && other.color === name)
+    if (holder) return this.sendError(connection, `${holder.name} already has ${name.toLowerCase()}.`)
+    player.color = name
+    const game = this.game
+    if (game && definition.recolor && game.playerIds.includes(player.id) && this.isGameInProgress()) {
+      game.state = definition.recolor(game.state, player.id, color)
     }
     this.broadcastState()
   }
@@ -318,10 +398,11 @@ export class Room extends Server<Env> {
       for (const seat of seats) teams[seat.id] = seat.team!
     }
 
+    const colors = definition.playerColors ? this.assignColors(playerIds, definition.playerColors) : undefined
     this.game = {
       gameId: definition.id,
       playerIds,
-      state: definition.setup(playerIds, this.gameOptions, { teams }),
+      state: definition.setup(playerIds, this.gameOptions, { teams, colors }),
     }
     this.broadcastState()
   }
@@ -396,6 +477,11 @@ export class Room extends Server<Env> {
   private stateFor(viewerId: string | null): RoomState {
     const game = this.game
     const definition = game && getGame(game.gameId)!
+    const colorNames = this.palette()?.map((swatch) => swatch.name) ?? []
+    const colorIndex = (name: string | null) => {
+      const index = name === null ? -1 : colorNames.indexOf(name)
+      return index === -1 ? null : index
+    }
     return {
       code: this.name,
       you: viewerId,
@@ -403,11 +489,12 @@ export class Room extends Server<Env> {
       selectedGameId: this.selectedGameId,
       options: this.gameOptions,
       pickedIds: this.pickedIds,
-      players: [...this.players.values()].map(({ id, name, connectionId, team }) => ({
+      players: [...this.players.values()].map(({ id, name, connectionId, team, color }) => ({
         id,
         name,
         connected: connectionId !== null,
         team,
+        color: colorIndex(color),
       })),
       game:
         game && definition

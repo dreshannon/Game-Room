@@ -1,4 +1,4 @@
-import { MoveError, type Game } from '../types'
+import { MoveError, type Game, type PlayerColor } from '../types'
 import { findBannedWord } from './bannedWords'
 
 export const COLUMNS = 30
@@ -7,6 +7,18 @@ export const CELL_COUNT = COLUMNS * ROWS
 export const COLORS_PER_CARD = 4
 export const DEFAULT_TARGET_SCORE = 50
 const MAX_WORD_LENGTH = 24
+
+/** Token colors, chosen to stand out from each other. Tokens are outlined so they show on any board color. */
+export const TOKEN_COLORS: PlayerColor[] = [
+  { name: 'Black', fill: '#111111', text: '#ffffff' },
+  { name: 'White', fill: '#ffffff', text: '#111111' },
+  { name: 'Red', fill: '#d7263d', text: '#ffffff' },
+  { name: 'Blue', fill: '#1b4fd8', text: '#ffffff' },
+  { name: 'Green', fill: '#0b8a3e', text: '#ffffff' },
+  { name: 'Purple', fill: '#7b2cbf', text: '#ffffff' },
+  { name: 'Orange', fill: '#f28c00', text: '#111111' },
+  { name: 'Teal', fill: '#00a6a6', text: '#111111' },
+]
 
 export type Phase = 'firstClue' | 'firstGuess' | 'secondClue' | 'secondGuess' | 'reveal'
 
@@ -18,7 +30,7 @@ export interface Token {
 export interface ColorCluesState {
   /** Seating order. Clue-giving and guessing both follow it. */
   order: string[]
-  /** Each player's token color. Stays fixed if someone leaves. */
+  /** Each player's token color, as an index into TOKEN_COLORS. */
   seats: Record<string, number>
   giverId: string
   /** Who the next clue-giver follows. Differs from giverId only if the giver left during reveal. */
@@ -143,14 +155,20 @@ function requireGiver(state: ColorCluesState, playerId: string, phase: Phase) {
   if (state.giverId !== playerId) throw new MoveError('Only the clue-giver can do that.')
 }
 
-const splitWords = (text: unknown) =>
-  typeof text === 'string' ? text.trim().split(/\s+/).filter(Boolean) : []
+/** The words in a clue. Underscores count as spaces, so they can't join words into one. */
+export const splitWords = (text: unknown) =>
+  typeof text === 'string' ? text.split(/[\s_]+/).filter(Boolean) : []
+
+/** What's wrong with a clue's length, or null if it's fine. */
+export function wordCountProblem(words: string[], maxWords: number) {
+  if (words.length > 0 && words.length <= maxWords) return null
+  const allowed = maxWords === 1 ? 'exactly one word' : `1 to ${maxWords} words`
+  return `The clue must be ${allowed}.`
+}
 
 function validateWords(words: string[], maxWords: number) {
-  if (words.length === 0 || words.length > maxWords) {
-    const allowed = maxWords === 1 ? 'exactly one word' : `1 to ${maxWords} words`
-    throw new MoveError(`The clue must be ${allowed}.`)
-  }
+  const problem = wordCountProblem(words, maxWords)
+  if (problem) throw new MoveError(problem)
   if (words.some((word) => word.length > MAX_WORD_LENGTH)) {
     throw new MoveError(`Each word can be up to ${MAX_WORD_LENGTH} letters.`)
   }
@@ -165,14 +183,15 @@ export const colorClues: Game<ColorCluesState, ColorCluesView> = {
   name: 'Shade Hunt',
   minPlayers: 2,
   maxPlayers: 8,
+  playerColors: TOKEN_COLORS,
   options: [
     { key: 'targetScore', label: 'Play to', min: 10, max: 200, default: DEFAULT_TARGET_SCORE },
   ],
 
-  setup(playerIds, options) {
+  setup(playerIds, options, context) {
     const initial: ColorCluesState = {
       order: playerIds,
-      seats: Object.fromEntries(playerIds.map((id, seat) => [id, seat])),
+      seats: Object.fromEntries(playerIds.map((id, seat) => [id, context?.colors?.[id] ?? seat])),
       giverId: playerIds[0]!,
       nextGiverAfterIndex: 0,
       round: 0,
@@ -288,6 +307,29 @@ export const colorClues: Game<ColorCluesState, ColorCluesView> = {
   waitingOn(state) {
     if (state.phase === 'firstClue' || state.phase === 'secondClue') return [state.giverId]
     return state.queue.slice(0, 1)
+  },
+
+  onPlayerJoin(state, playerId, color) {
+    if (state.order.includes(playerId)) return state
+    // They sit just before the clue-giver, so they give a clue once everyone else has had a go.
+    const at = state.nextGiverAfterIndex
+    const order = [...state.order.slice(0, at), playerId, ...state.order.slice(at)]
+    const guessing = state.phase === 'firstGuess' || state.phase === 'secondGuess'
+    return {
+      ...state,
+      order,
+      nextGiverAfterIndex: at + 1,
+      seats: { ...state.seats, [playerId]: color },
+      scores: { ...state.scores, [playerId]: 0 },
+      roundScores: state.roundScores && { ...state.roundScores, [playerId]: 0 },
+      // Mid-guessing, they take the last turn.
+      queue: guessing ? [...state.queue, playerId] : state.queue,
+    }
+  },
+
+  recolor(state, playerId, color) {
+    if (!state.order.includes(playerId)) return state
+    return { ...state, seats: { ...state.seats, [playerId]: color } }
   },
 
   onPlayerLeave(state, playerId) {
