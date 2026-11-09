@@ -9,6 +9,8 @@
   --accent-ink: #ffffff;
   --accent-soft: #f6dcd2;
   --radius: 0.6rem;
+  /* Light catching the top of a glossy card. */
+  --card-gloss: linear-gradient(160deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.08) 30%, transparent 48%);
 }
 
 :root[data-theme='dark'] {

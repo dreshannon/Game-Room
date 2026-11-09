@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import type { Card } from '../../../games/overheat/logic'
+import { canAnimate } from '../../motion'
+import CardBack from './CardBack.vue'
 
 const props = defineProps<{
   card: Card | null
@@ -10,6 +12,8 @@ const props = defineProps<{
   boost?: boolean
   fromStress?: boolean
   marked?: 'discard'
+  /** Turns the card over when it appears, as when a Stress card or Boost flips one from the deck. */
+  reveal?: boolean
 }>()
 
 defineEmits<{ click: [] }>()
@@ -43,6 +47,16 @@ const tag = computed(() => {
   return null
 })
 
+const root = ref<HTMLElement | null>(null)
+
+onMounted(() => {
+  if (!props.reveal || !root.value || !canAnimate()) return
+  root.value.animate(
+    [{ transform: 'perspective(500px) rotateY(180deg) scale(1.08)' }, { transform: 'perspective(500px) rotateY(0) scale(1)' }],
+    { duration: 650, delay: 150, easing: 'cubic-bezier(.3,.7,.3,1)', fill: 'backwards' },
+  )
+})
+
 // Simple line drawings of our own, sized to a 24×24 grid.
 const THERMOMETER =
   '<path d="M10 14.5V5a2 2 0 0 1 4 0v9.5a4 4 0 1 1-4 0z"/><path d="M12 9v7" stroke-width="3"/><circle cx="12" cy="17.5" r="2" fill="currentColor" stroke="none"/>'
@@ -53,14 +67,18 @@ const STAR = '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8
 
 <template>
   <button
+    ref="root"
     type="button"
     class="race-card"
     :class="[card?.kind ?? 'empty', `v${card?.value ?? 0}`, { selected, small, boost, discard: marked === 'discard' }]"
     :aria-pressed="selected"
     :aria-label="`${label}${boost ? ' from a Boost' : ''}${fromStress ? ' from a Stress card' : ''}`"
     :disabled="disabled"
+    :data-card-id="card?.id"
     @click="$emit('click')"
   >
+    <!-- Seen only while the card is turning over. -->
+    <span class="back"><CardBack /></span>
     <span class="face" aria-hidden="true">
       <template v-if="corner !== null">
         <span class="corner tl">{{ corner }}</span>
@@ -113,6 +131,7 @@ const STAR = '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.5) inset,
     0 2px 3px rgba(0, 0, 0, 0.25);
+  transform-style: preserve-3d;
   transition:
     transform 0.15s,
     box-shadow 0.15s;
@@ -138,6 +157,7 @@ const STAR = '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8
 
 .face {
   position: relative;
+  backface-visibility: hidden;
   display: grid;
   place-items: center;
   width: 100%;
@@ -146,6 +166,29 @@ const STAR = '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8
   border-radius: 0.32rem;
   background: var(--panel);
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+/* A glossy sheen over the whole card, border included. */
+.race-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  background: var(--card-gloss);
+  opacity: 0.5;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  backface-visibility: hidden;
+}
+
+.back {
+  position: absolute;
+  inset: -1px;
+  z-index: 3;
+  transform: rotateY(180deg) translateZ(1px);
+  backface-visibility: hidden;
+  pointer-events: none;
 }
 
 /* ---- Corner indices ---- */

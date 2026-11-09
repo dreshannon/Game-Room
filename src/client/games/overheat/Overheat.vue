@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import {
   type Card,
   type OverheatMove,
@@ -7,6 +7,7 @@ import {
   type RaceEvent,
 } from '../../../games/overheat/logic'
 import { cornersOf, getTrack } from '../../../games/overheat/tracks'
+import { canAnimate } from '../../motion'
 import type { PublicPlayer } from '../../../shared/protocol'
 import CardStack from './CardStack.vue'
 import GearShifter from './GearShifter.vue'
@@ -119,6 +120,38 @@ const preview = computed(() => {
 function lockIn() {
   emit('move', { type: 'plan', gear: gear.value, cards: [...picked.value] })
 }
+
+// ---- Dealing ----
+
+const deckPile = ref<InstanceType<typeof CardStack> | null>(null)
+const handRow = ref<HTMLElement | null>(null)
+
+/** New cards fly in from the deck face down and turn over as they land. */
+watch(
+  () => hand.value.map((card) => card.id),
+  async (ids, old) => {
+    if (!old || !canAnimate()) return
+    const added = new Set(ids.filter((id) => !old.includes(id)))
+    if (added.size === 0) return
+    await nextTick()
+    const deck = (deckPile.value?.$el as HTMLElement | undefined)?.getBoundingClientRect()
+    const cards = [...(handRow.value?.querySelectorAll<HTMLElement>('[data-card-id]') ?? [])].filter((el) =>
+      added.has(Number(el.dataset.cardId)),
+    )
+    cards.forEach((el, index) => {
+      const box = el.getBoundingClientRect()
+      const dx = deck ? deck.left + deck.width / 2 - (box.left + box.width / 2) : 0
+      const dy = deck ? deck.top + deck.height / 2 - (box.top + box.height / 2) : -20
+      el.animate(
+        [
+          { transform: `translate(${dx}px, ${dy}px) perspective(500px) rotateY(180deg) scale(0.75)` },
+          { transform: 'translate(0, 0) perspective(500px) rotateY(0) scale(1)' },
+        ],
+        { duration: 560, delay: index * 110, easing: 'cubic-bezier(.2,.8,.3,1)', fill: 'backwards' },
+      )
+    })
+  },
+)
 
 const sortedHand = computed(() => {
   const rank = { speed: 0, upgrade: 1, stress: 2, heat: 3 }
@@ -275,7 +308,7 @@ watch(
             </span>
           </div>
           <div class="piles">
-            <CardStack :count="me.deck" label="Deck" />
+            <CardStack ref="deckPile" :count="me.deck" label="Deck" />
             <CardStack :count="me.discard" label="Discard" muted />
           </div>
         </div>
@@ -296,7 +329,7 @@ watch(
           </p>
         </template>
 
-        <div class="hand" :class="{ choosing: canPlan || me.needsDiscard }">
+        <div ref="handRow" class="hand" :class="{ choosing: canPlan || me.needsDiscard }">
           <RaceCard
             v-for="card in sortedHand"
             :key="card.id"
@@ -328,7 +361,7 @@ watch(
         <template v-if="yourStep === 'react' && view.you.react">
           <div class="played">
             <span class="label">Played</span>
-            <RaceCard v-for="(entry, i) in me.play" :key="i" :card="entry.flipped ?? entry.card!" :boost="entry.boost" :from-stress="entry.card?.kind === 'stress'" small />
+            <RaceCard v-for="(entry, i) in me.play" :key="i" :card="entry.flipped ?? entry.card!" :boost="entry.boost" :from-stress="entry.card?.kind === 'stress'" :reveal="entry.boost || entry.card?.kind === 'stress'" small />
             <strong class="speed">Speed {{ me.speed }}</strong>
           </div>
           <p v-if="cornerCost" class="warning" :class="{ danger: cornerCost.spin }">
