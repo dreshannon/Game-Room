@@ -6,6 +6,7 @@ import { MAX_NAME_LENGTH, type ClosedReason, type PublicPlayer } from '../../sha
 import { gameViews } from '../games'
 import { useRoom } from '../useRoom'
 import { useTurnAlert } from '../useTurnAlert'
+import GamePicker from './GamePicker.vue'
 import RulesDialog from './RulesDialog.vue'
 import SoundMenu from './SoundMenu.vue'
 import ThemeToggle from './ThemeToggle.vue'
@@ -215,18 +216,17 @@ function endGame() {
 
           <template v-else>
             <h2>Lobby</h2>
-            <label v-if="isHost" class="field">
-              Game
-              <select
-                :value="state.selectedGameId"
-                @change="
-                  send({ type: 'selectGame', gameId: ($event.target as HTMLSelectElement).value })
-                "
-              >
-                <option v-for="game in games" :key="game.id" :value="game.id">{{ game.name }}</option>
-              </select>
-            </label>
-            <p v-else>Next up: <strong>{{ selectedGame?.name }}</strong></p>
+            <p class="muted">
+              <template v-if="isHost">Pick a game.</template>
+              <template v-else>The host picks the game. Next up: <strong>{{ selectedGame?.name }}</strong></template>
+            </p>
+            <GamePicker
+              :games="games"
+              :selected-id="state.selectedGameId"
+              :can-pick="isHost"
+              :connected-count="connectedCount"
+              @select="send({ type: 'selectGame', gameId: $event })"
+            />
 
             <template v-for="option in shownOptions" :key="option.key">
               <label v-if="isHost" class="field">
