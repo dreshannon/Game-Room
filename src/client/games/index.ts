@@ -7,6 +7,8 @@ import LuckyStreakRevengeRules from './rules/LuckyStreakRevengeRules.vue'
 import LuckyStreakRules from './rules/LuckyStreakRules.vue'
 import MascotMayhem from './mascot-mayhem/MascotMayhem.vue'
 import MascotMayhemRules from './rules/MascotMayhemRules.vue'
+import MidnightLift from './midnight-lift/MidnightLift.vue'
+import MidnightLiftRules from './rules/MidnightLiftRules.vue'
 import OverheatRules from './rules/OverheatRules.vue'
 import Overheat from './overheat/Overheat.vue'
 import ShadeHuntRules from './rules/ShadeHuntRules.vue'
@@ -68,6 +70,12 @@ export const gameViews: Record<string, GameView> = {
     rules: MascotMayhemRules,
     tagline: 'Bet on a mascot race, then rig the deck.',
     accent: '#f2b705',
+  },
+  'midnight-lift': {
+    component: MidnightLift,
+    rules: MidnightLiftRules,
+    tagline: 'One thief, the whole Watch, four nights to get away.',
+    accent: '#3a3f52',
   },
   'tic-tac-toe': {
     component: TicTacToe,

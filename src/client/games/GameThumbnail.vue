@@ -29,6 +29,16 @@ const TIERS = [
   { label: 'C', fill: '#4d7cfe', count: 1 },
 ]
 
+// Midnight Lift: a few blocks at night, a thief's trail and two wardens.
+const LIFT_BLOCKS = [
+  [10, 4, 50],
+  [80, 4, 70],
+  [170, 4, 24],
+  [10, 60, 80],
+  [110, 60, 40],
+  [170, 60, 24],
+]
+
 // Tic-Tac-Toe: a game partway through.
 const MARKS = ['X', 'O', '', '', 'X', '', 'O', '', 'X']
 </script>
@@ -109,6 +119,16 @@ const MARKS = ['X', 'O', '', '', 'X', '', 'O', '', 'X']
       >
         <MascotSprite :animal="mascot.animal" :color="mascot.color" running />
       </g>
+    </svg>
+
+    <svg v-else-if="gameId === 'midnight-lift'" viewBox="0 0 200 110">
+      <rect width="200" height="110" rx="8" class="ml-ground" />
+      <rect v-for="(b, i) in LIFT_BLOCKS" :key="i" :x="b[0]" :y="b[1]" :width="b[2]" height="38" rx="4" class="ml-block" />
+      <polyline points="40,51 70,51 100,51 100,80 130,80" class="ml-trail" />
+      <circle cx="130" cy="80" r="7" class="ml-thief" />
+      <circle cx="160" cy="51" r="9" fill="#2f6fde" stroke="#fff" stroke-width="2" />
+      <circle cx="70" cy="22" r="9" fill="#d6453d" stroke="#fff" stroke-width="2" />
+      <circle cx="40" cy="51" r="8" class="ml-lantern" />
     </svg>
 
     <svg v-else-if="gameId === 'tic-tac-toe'" viewBox="0 0 200 110">
@@ -218,6 +238,41 @@ svg {
 
 :root[data-theme='dark'] .o {
   stroke: #6f9bff;
+}
+
+/* Midnight Lift */
+.ml-ground {
+  fill: #3a3f52;
+}
+
+.ml-block {
+  fill: #e9e1cf;
+}
+
+:root[data-theme='dark'] .ml-ground {
+  fill: #12141c;
+}
+
+:root[data-theme='dark'] .ml-block {
+  fill: #2c2a33;
+}
+
+.ml-trail {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ml-thief {
+  fill: #1d1b19;
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.ml-lantern {
+  fill: #ffc93c;
 }
 
 /* Lucky Streak: two card backs fanned behind a face-up card. */
