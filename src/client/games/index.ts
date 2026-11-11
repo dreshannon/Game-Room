@@ -2,6 +2,8 @@ import type { Component } from 'vue'
 import ColorClues from './ColorClues.vue'
 import DialIn from './DialIn.vue'
 import DialInRules from './rules/DialInRules.vue'
+import Glowcatch from './glowcatch/Glowcatch.vue'
+import GlowcatchRules from './rules/GlowcatchRules.vue'
 import LuckyStreak from './LuckyStreak.vue'
 import LuckyStreakRevengeRules from './rules/LuckyStreakRevengeRules.vue'
 import LuckyStreakRules from './rules/LuckyStreakRules.vue'
@@ -76,6 +78,12 @@ export const gameViews: Record<string, GameView> = {
     rules: MidnightLiftRules,
     tagline: 'One thief, the whole Watch, four nights to get away.',
     accent: '#3a3f52',
+  },
+  glowcatch: {
+    component: Glowcatch,
+    rules: GlowcatchRules,
+    tagline: 'Bet dice on fireflies. Fewest dice roll first.',
+    accent: '#34406b',
   },
   'tic-tac-toe': {
     component: TicTacToe,

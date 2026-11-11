@@ -39,6 +39,15 @@ const LIFT_BLOCKS = [
   [170, 60, 24],
 ]
 
+// Glowcatch: fireflies over a night meadow, x, y and glow size.
+const FIREFLIES: [number, number, number][] = [
+  [40, 34, 7],
+  [98, 22, 10],
+  [150, 44, 6],
+  [70, 68, 5],
+  [128, 76, 8],
+]
+
 // Tic-Tac-Toe: a game partway through.
 const MARKS = ['X', 'O', '', '', 'X', '', 'O', '', 'X']
 </script>
@@ -129,6 +138,15 @@ const MARKS = ['X', 'O', '', '', 'X', '', 'O', '', 'X']
       <circle cx="160" cy="51" r="9" fill="#2f6fde" stroke="#fff" stroke-width="2" />
       <circle cx="70" cy="22" r="9" fill="#d6453d" stroke="#fff" stroke-width="2" />
       <circle cx="40" cy="51" r="8" class="ml-lantern" />
+    </svg>
+
+    <svg v-else-if="gameId === 'glowcatch'" viewBox="0 0 200 110">
+      <rect width="200" height="110" rx="8" class="gc-sky" />
+      <path d="M0 96 Q50 84 100 94 T200 90 V110 H0 Z" class="gc-grass" />
+      <g v-for="(f, i) in FIREFLIES" :key="i">
+        <circle :cx="f[0]" :cy="f[1]" :r="f[2] * 2" class="gc-halo" />
+        <circle :cx="f[0]" :cy="f[1]" :r="f[2] * 0.7" class="gc-glow" />
+      </g>
     </svg>
 
     <svg v-else-if="gameId === 'tic-tac-toe'" viewBox="0 0 200 110">
@@ -273,6 +291,28 @@ svg {
 
 .ml-lantern {
   fill: #ffc93c;
+}
+
+/* Glowcatch */
+.gc-sky {
+  fill: #34406b;
+}
+
+:root[data-theme='dark'] .gc-sky {
+  fill: #0f1426;
+}
+
+.gc-grass {
+  fill: #23463a;
+}
+
+.gc-halo {
+  fill: #e8e35a;
+  opacity: 0.22;
+}
+
+.gc-glow {
+  fill: #f1ea6b;
 }
 
 /* Lucky Streak: two card backs fanned behind a face-up card. */
