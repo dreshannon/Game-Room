@@ -242,6 +242,13 @@ function bust(state: StreakState, playerId: string) {
   log(state, { type: 'bust', playerId })
 }
 
+/** Puts a number card into a player's line, keeping the line in numerical order. */
+function insertNumber(hand: Hand, card: NumberCard) {
+  const index = hand.numbers.findIndex((held) => held.value > card.value)
+  if (index === -1) hand.numbers.push(card)
+  else hand.numbers.splice(index, 0, card)
+}
+
 /** Adds a number card to a player's line, by drawing, stealing, or swapping. */
 function addNumber(state: StreakState, playerId: string, card: NumberCard) {
   const hand = state.hands[playerId]!
@@ -268,12 +275,12 @@ function addNumber(state: StreakState, playerId: string, card: NumberCard) {
       log(state, { type: 'saved', playerId })
       return
     }
-    hand.numbers.push(card)
+    insertNumber(hand, card)
     bust(state, playerId)
     return
   }
 
-  hand.numbers.push(card)
+  insertNumber(hand, card)
   if (hand.numbers.length >= 7) {
     state.flip7PlayerId = playerId
     log(state, { type: 'flip7', playerId })

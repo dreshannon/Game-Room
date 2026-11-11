@@ -268,10 +268,16 @@ export function useTableReplay(view: () => StreakView, root: Ref<HTMLElement | n
           }
           break
         case 'bust': {
-          const hand = view().hands[step.playerId]
-          const last = hand?.numbers.at(-1)
-          const pair = hand?.numbers.filter((card) => card.value === last?.value) ?? []
-          if (pair.length > 1) pair.forEach((card) => clashing.add(card.id))
+          const current = view()
+          const numbers = current.hands[step.playerId]?.numbers ?? []
+          // The line is kept in order, so find the clashing cards by value, not position.
+          // A Lucky 13 lets a pair of 13s sit together without busting.
+          const lucky13 =
+            current.variant === 'revenge' && numbers.some((card) => card.special === 'lucky13')
+          const count = (value: number) => numbers.filter((card) => card.value === value).length
+          for (const card of numbers) {
+            if (count(card.value) > (lucky13 && card.value === 13 ? 2 : 1)) clashing.add(card.id)
+          }
           shaking.add(step.playerId)
           sounds.bust()
           await wait(650)

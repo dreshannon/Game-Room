@@ -118,6 +118,13 @@ describe('dealing and turns', () => {
     expect(turnOf(state)).toBe('c')
   })
 
+  it('keeps each line in numerical order as cards are drawn', () => {
+    // With two players, b is dealt first and takes the first turn; a stays so b keeps drawing.
+    let state = game('classic', [num(8), num(7), num(3), num(11), num(5)], ['a', 'b'])
+    state = hit(hit(stay(hit(state, 'b'), 'a'), 'b'), 'b')
+    expect(values(state, 'b')).toEqual([3, 5, 8, 11])
+  })
+
   it('rejects moves out of turn', () => {
     expect(() => hit(game('classic', [num(5), num(6), num(7)]), 'c')).toThrow(MoveError)
   })
@@ -315,7 +322,7 @@ describe('revenge actions', () => {
       action('flipFour'), num(1), modifier('minus', 2), num(2), num(3),
     ])
     state = target(hit(state, 'b'), 'b', 'c')
-    expect(values(state, 'c')).toEqual([6, 1, 2, 3])
+    expect(values(state, 'c')).toEqual([1, 2, 3, 6])
     expect(state.choice).toMatchObject({ kind: 'target', playerId: 'c' })
   })
 
@@ -336,6 +343,14 @@ describe('revenge actions', () => {
     state = move(state, 'b', { type: 'steal', ownerId: 'a', cardId: stolen })
     expect(state.hands.a!.numbers).toEqual([])
     expect(state.hands.b!.status).toBe('busted')
+  })
+
+  it('puts a stolen number in order in the stealer’s line', () => {
+    let state = game('revenge', [num(2), num(6), num(4), action('steal')])
+    state.hands.b!.numbers.push(num(9))
+    state = hit(state, 'b')
+    state = move(state, 'b', { type: 'steal', ownerId: 'a', cardId: state.hands.a!.numbers[0]!.id })
+    expect(values(state, 'b')).toEqual([2, 4, 9])
   })
 
   it('lets Swap bust two players at once', () => {
