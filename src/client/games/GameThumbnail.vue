@@ -4,6 +4,8 @@ import LuckyCardBack from './lucky-streak/CardBack.vue'
 import MascotSprite from './mascot-mayhem/MascotSprite.vue'
 import PlayingCard from './PlayingCard.vue'
 import { MASCOTS } from '../../games/mascot-mayhem/data'
+import { PATTERNS, turn } from '../../games/drift-lines/paths'
+import { channel, channels } from './drift-lines/art'
 
 defineProps<{ gameId: string }>()
 
@@ -37,6 +39,17 @@ const LIFT_BLOCKS = [
   [10, 60, 80],
   [110, 60, 40],
   [170, 60, 24],
+]
+
+// Drift Lines: a strip of channel pieces with two lanterns' trails. Squares are 100 units, drawn at a third.
+const DRIFT_PIECES = [3, 11, 20, 7, 28, 15].map((pattern, i) => ({
+  x: (i % 3) * 100,
+  y: Math.floor(i / 3) * 100,
+  paths: channels(turn(PATTERNS[pattern]!, i % 4)),
+}))
+const DRIFT_TRAILS = [
+  { d: channel(0, 5, 0, 0), fill: '#e63946' },
+  { d: channel(7, 2, 100, 100), fill: '#3a86ff' },
 ]
 
 // Tic-Tac-Toe: a game partway through.
@@ -129,6 +142,19 @@ const MARKS = ['X', 'O', '', '', 'X', '', 'O', '', 'X']
       <circle cx="160" cy="51" r="9" fill="#2f6fde" stroke="#fff" stroke-width="2" />
       <circle cx="70" cy="22" r="9" fill="#d6453d" stroke="#fff" stroke-width="2" />
       <circle cx="40" cy="51" r="8" class="ml-lantern" />
+    </svg>
+
+    <svg v-else-if="gameId === 'drift-lines'" viewBox="0 0 200 110">
+      <rect width="200" height="110" rx="8" class="dl-canal" />
+      <g transform="translate(50 5) scale(0.333)">
+        <g v-for="(p, i) in DRIFT_PIECES" :key="i" :transform="`translate(${p.x} ${p.y})`">
+          <rect x="4" y="4" width="92" height="92" rx="10" class="dl-piece" />
+          <path v-for="c in p.paths" :key="c.key" :d="c.d" class="dl-water" />
+        </g>
+        <path v-for="(t, i) in DRIFT_TRAILS" :key="i" :d="t.d" class="dl-trail" :style="{ stroke: t.fill }" />
+        <circle cx="33" cy="100" r="16" fill="#e63946" />
+        <circle cx="200" cy="133" r="16" fill="#3a86ff" />
+      </g>
     </svg>
 
     <svg v-else-if="gameId === 'tic-tac-toe'" viewBox="0 0 200 110">
@@ -273,6 +299,32 @@ svg {
 
 .ml-lantern {
   fill: #ffc93c;
+}
+
+/* Drift Lines */
+.dl-canal {
+  fill: #2b4a63;
+}
+
+:root[data-theme='dark'] .dl-canal {
+  fill: #13222f;
+}
+
+.dl-piece {
+  fill: #f3ede0;
+}
+
+.dl-water {
+  fill: none;
+  stroke: #9bb3c4;
+  stroke-width: 9;
+  stroke-linecap: round;
+}
+
+.dl-trail {
+  fill: none;
+  stroke-width: 13;
+  stroke-linecap: round;
 }
 
 /* Lucky Streak: two card backs fanned behind a face-up card. */

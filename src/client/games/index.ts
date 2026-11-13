@@ -2,6 +2,8 @@ import type { Component } from 'vue'
 import ColorClues from './ColorClues.vue'
 import DialIn from './DialIn.vue'
 import DialInRules from './rules/DialInRules.vue'
+import DriftLines from './drift-lines/DriftLines.vue'
+import DriftLinesRules from './rules/DriftLinesRules.vue'
 import LuckyStreak from './LuckyStreak.vue'
 import LuckyStreakRevengeRules from './rules/LuckyStreakRevengeRules.vue'
 import LuckyStreakRules from './rules/LuckyStreakRules.vue'
@@ -76,6 +78,12 @@ export const gameViews: Record<string, GameView> = {
     rules: MidnightLiftRules,
     tagline: 'One thief, the whole Watch, four nights to get away.',
     accent: '#3a3f52',
+  },
+  'drift-lines': {
+    component: DriftLines,
+    rules: DriftLinesRules,
+    tagline: 'Lay channels, steer your lantern, keep it lit.',
+    accent: '#2b6f8f',
   },
   'tic-tac-toe': {
     component: TicTacToe,
