@@ -54,6 +54,17 @@ const DRIFT_TRAILS = [
 
 // Tic-Tac-Toe: a game partway through.
 const MARKS = ['X', 'O', '', '', 'X', '', 'O', '', 'X']
+
+// Wind Swap: two fleets meeting in the middle of the bay, and a wind card.
+const BAY_SHIPS = [
+  { x: 0, y: 0, fleet: 1, captain: false },
+  { x: 2, y: 0, fleet: 1, captain: true },
+  { x: 3, y: 1, fleet: 1, captain: false },
+  { x: 1, y: 2, fleet: 0, captain: false },
+  { x: 2, y: 3, fleet: 0, captain: false },
+  { x: 2, y: 4, fleet: 0, captain: true },
+]
+const BAY_WIND = [7, 11, 13, 17]
 </script>
 
 <template>
@@ -157,6 +168,22 @@ const MARKS = ['X', 'O', '', '', 'X', '', 'O', '', 'X']
       </g>
     </svg>
 
+    <svg v-else-if="gameId === 'wind-swap'" viewBox="0 0 200 110">
+      <g transform="translate(40 5)">
+        <rect v-for="i in 25" :key="i" :x="((i - 1) % 5) * 20" :y="Math.floor((i - 1) / 5) * 20" width="19" height="19" rx="2" class="water" />
+        <g v-for="(ship, i) in BAY_SHIPS" :key="i" :transform="`translate(${ship.x * 20 + 2} ${ship.y * 20 + 1})`" :class="`bay-fleet-${ship.fleet}`">
+          <path d="M8 2 L8 11 L3 11 Z" class="bay-sail" />
+          <path v-if="ship.captain" d="M9 3 L9 11 L13 11 Z" class="bay-sail" />
+          <path d="M1 12 H15 L13 16 H3 Z" />
+        </g>
+      </g>
+      <g transform="translate(148 30)">
+        <rect width="40" height="50" rx="5" class="chip" />
+        <rect v-for="i in 25" :key="i" :x="6 + ((i - 1) % 5) * 6" :y="8 + Math.floor((i - 1) / 5) * 6" width="5" height="5" rx="1"
+          :class="i - 1 === 12 ? 'bay-center' : BAY_WIND.includes(i - 1) ? 'bay-move' : 'water'" />
+      </g>
+    </svg>
+
     <svg v-else-if="gameId === 'tic-tac-toe'" viewBox="0 0 200 110">
       <g class="grid">
         <line x1="85" y1="10" x2="85" y2="100" />
@@ -242,6 +269,30 @@ svg {
 
 .finish.ink {
   stroke: var(--ink);
+}
+
+.water {
+  fill: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+.bay-fleet-0 {
+  fill: var(--accent);
+}
+
+.bay-fleet-1 {
+  fill: var(--ink);
+}
+
+.bay-sail {
+  opacity: 0.55;
+}
+
+.bay-center {
+  fill: var(--ink);
+}
+
+.bay-move {
+  fill: var(--accent);
 }
 
 .grid line {

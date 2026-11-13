@@ -18,6 +18,8 @@ import TicTacToeRules from './rules/TicTacToeRules.vue'
 import TierTalkRules from './rules/TierTalkRules.vue'
 import TicTacToe from './TicTacToe.vue'
 import TierTalk from './TierTalk.vue'
+import WindSwap from './wind-swap/WindSwap.vue'
+import WindSwapRules from './rules/WindSwapRules.vue'
 
 export interface GameView {
   /** Receives `view`, `you` (player id) and `players` as props, and emits `move`. */
@@ -84,6 +86,12 @@ export const gameViews: Record<string, GameView> = {
     rules: DriftLinesRules,
     tagline: 'Lay channels, steer your lantern, keep it lit.',
     accent: '#2b6f8f',
+  },
+  'wind-swap': {
+    component: WindSwap,
+    rules: WindSwapRules,
+    tagline: 'Every wind you use blows over to your rival.',
+    accent: '#2f7d8c',
   },
   'tic-tac-toe': {
     component: TicTacToe,
