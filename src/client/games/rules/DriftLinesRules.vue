@@ -3,14 +3,16 @@
 
   <h3>Setup</h3>
   <ul>
-    <li>Lanterns start on the wall around the board, spread out or picked by each player in turn.</li>
+    <li>Lanterns start on the wall around the board, either spread out at random or picked by the players.</li>
+    <li>When players pick, everyone picks at once and in secret. If two pick the same spot, whoever is earlier in turn order gets it, and the other starts at the nearest free spot.</li>
+    <li>Each lantern shows its place in turn order.</li>
     <li>You hold 3 channel pieces. Only you can see them.</li>
     <li>The board gets bigger with more players: 6 by 6 up to 4 players, 8 by 8 up to 8, and 10 by 10 up to 12.</li>
   </ul>
 
   <h3>Your turn</h3>
   <ol>
-    <li><strong>Place a piece</strong> on the empty square your lantern is facing. Turn it any way you like first. The board shows where you’d end up.</li>
+    <li><strong>Place a piece</strong> on the empty square your lantern is facing. Turn it any way you like first. The board shows where you’d end up, and where anyone else would drift. You can line up your piece while you wait.</li>
     <li><strong>Drift.</strong> Your lantern follows its channel across the new piece, and on through any pieces it joins, until it reaches an empty square. Any other lantern on the same square drifts too.</li>
     <li><strong>Draw</strong> back up to 3 pieces.</li>
   </ol>
@@ -21,6 +23,9 @@
     <li>If two lanterns meet on a channel, both go out.</li>
     <li>You can’t put your own lantern out if any piece, turned any way, keeps it lit. If every move puts you out, you have to pick one.</li>
   </ul>
+
+  <h3>Keys</h3>
+  <p><kbd>,</kbd> and <kbd>.</kbd> turn your piece left and right. <kbd>Space</kbd> or <kbd>Enter</kbd> places it. <kbd>1</kbd> to <kbd>3</kbd> pick a piece.</p>
 
   <h3>Time</h3>
   <p>If time runs out on your turn, a safe move is played for you. With no time limit, the host can play for someone who’s away.</p>

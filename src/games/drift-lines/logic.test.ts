@@ -163,7 +163,8 @@ describe('placing pieces', () => {
     expect(d(next, 'a').out).toEqual({ move: 1, why: 'wall' })
     expect(d(next, 'b').out).toEqual({ move: 1, why: 'wall' })
     expect(d(next, 'a').hand).toEqual([])
-    expect(next.last!.outs.map((o) => o.id).sort()).toEqual(['a', 'b'])
+    expect(next.log.at(-1)!.outs.map((o) => o.id).sort()).toEqual(['a', 'b'])
+    expect(next.log.at(-1)).toMatchObject({ move: 1, by: 'a', sq: 0 })
   })
 
   it('puts out both lanterns when they meet on a channel', () => {
@@ -249,31 +250,77 @@ describe('placing pieces', () => {
 })
 
 describe('picking starting spots', () => {
-  it('lets players pick in turn, then starts play', () => {
-    const { game, state } = newGame(['a', 'b'], { starts: 1 })
+  it('lets everyone pick at once, in secret, then starts play', () => {
+    const { game, state } = newGame(['a', 'b', 'c'], { starts: 1 })
     expect(state.phase).toBe('start')
     expect(state.drifters.every((x) => x.spot === null)).toBe(true)
-    expectMoveError(() => game.applyMove(state, 'b', { type: 'start', spot: 3 }), /not your turn/)
+    expect(game.waitingOn!(state).sort()).toEqual(['a', 'b', 'c'])
     expectMoveError(
       () => game.applyMove(state, 'a', { type: 'place', piece: d(state, 'a').hand[0]!.id, turns: 0 }),
       /Wait/,
     )
-    let next = game.applyMove(state, 'a', { type: 'start', spot: 3 })
-    expect(d(next, 'a').spot).toEqual(wallSpots(6)[3])
-    expect(freeStarts(next)).toHaveLength(47)
-    expectMoveError(() => game.applyMove(next, 'b', { type: 'start', spot: 3 }), /open spot/)
-    expectMoveError(() => game.applyMove(next, 'b', { type: 'start', spot: 48 }), /open spot/)
-    expectMoveError(() => game.applyMove(next, 'b', { type: 'start', spot: 'x' }), /Pick a spot/)
-    next = game.applyMove(next, 'b', { type: 'start', spot: 20 })
+    expectMoveError(() => game.applyMove(state, 'b', { type: 'start', spot: 48 }), /Pick a spot/)
+    expectMoveError(() => game.applyMove(state, 'b', { type: 'start', spot: -1 }), /Pick a spot/)
+    expectMoveError(() => game.applyMove(state, 'b', { type: 'start', spot: 'x' }), /Pick a spot/)
+    // Anyone can pick, in any order, and change their mind.
+    let next = game.applyMove(state, 'c', { type: 'start', spot: 30 })
+    next = game.applyMove(next, 'c', { type: 'start', spot: 20 })
+    expect(d(next, 'c').pick).toBe(20)
+    expect(d(next, 'c').spot).toBeNull()
+    expect(game.waitingOn!(next).sort()).toEqual(['a', 'b'])
+    // Picks stay secret until everyone has picked.
+    const bView = game.viewFor(next, 'b')
+    expect(bView.pick).toBeNull()
+    expect(bView.drifters.find((x) => x.id === 'c')!.picked).toBe(true)
+    expect(JSON.stringify(bView.drifters)).not.toContain('"pick"')
+    expect(game.viewFor(next, 'c').pick).toBe(20)
+    next = game.applyMove(next, 'a', { type: 'start', spot: 3 })
+    next = game.applyMove(next, 'b', { type: 'start', spot: 10 })
     expect(next.phase).toBe('play')
+    expect(d(next, 'a').spot).toEqual(wallSpots(6)[3])
+    expect(d(next, 'b').spot).toEqual(wallSpots(6)[10])
+    expect(d(next, 'c').spot).toEqual(wallSpots(6)[20])
     expect(next.order[next.current]).toBe('a')
+    expect(next.log).toEqual([{ move: 0, by: null, sq: null, outs: [], bumped: [] }])
+    expectMoveError(() => game.applyMove(next, 'a', { type: 'start', spot: 5 }), /already/)
   })
 
-  it('picks a spot for a player who runs out of time', () => {
+  it('gives a clash to whoever is earlier in turn order, and the next nearest spot to the other', () => {
+    const { game, state } = newGame(['a', 'b', 'c'], { starts: 1 })
+    let next = game.applyMove(state, 'c', { type: 'start', spot: 7 })
+    next = game.applyMove(next, 'b', { type: 'start', spot: 7 })
+    next = game.applyMove(next, 'a', { type: 'start', spot: 7 })
+    expect(d(next, 'a').spot).toEqual(wallSpots(6)[7])
+    expect(d(next, 'b').spot).toEqual(wallSpots(6)[8])
+    expect(d(next, 'c').spot).toEqual(wallSpots(6)[6])
+    expect(next.log[0]!.bumped).toEqual(['b', 'c'])
+  })
+
+  it('wraps round the corner of the wall when looking for a free spot', () => {
+    const { game, state } = newGame(['a', 'b'], { starts: 1 })
+    let next = game.applyMove(state, 'a', { type: 'start', spot: 0 })
+    next = game.applyMove(next, 'b', { type: 'start', spot: 0 })
+    expect(d(next, 'b').spot).toEqual(wallSpots(6)[1])
+  })
+
+  it('hands out spots to anyone still picking when time runs out', () => {
     const { game, state } = newGame(['a', 'b'], { starts: 1, timer: 20 })
-    const next = game.tick!(state)
+    expect(game.tickDelay!(state)).toBeGreaterThan(15000)
+    const picked = game.applyMove(state, 'b', { type: 'start', spot: 12 })
+    const next = game.tick!(picked)
+    expect(next.phase).toBe('play')
     expect(d(next, 'a').spot).not.toBeNull()
-    expect(next.order[next.current]).toBe('b')
+    expect(d(next, 'b').spot).toEqual(wallSpots(6)[12])
+    expect(next.order[next.current]).toBe('a')
+    expect(next.turnEndsAt).toBeGreaterThan(Date.now())
+  })
+
+  it('lets the host hand out spots without waiting', () => {
+    const { game, state } = newGame(['a', 'b'], { starts: 1 })
+    expectMoveError(() => game.applyMove(state, 'a', { type: 'skip' }), /host/)
+    const next = game.applyMove(state, 'a', { type: 'skip' }, { isHost: true })
+    expect(next.phase).toBe('play')
+    expect(next.drifters.every((x) => x.spot)).toBe(true)
   })
 })
 
@@ -332,11 +379,24 @@ describe('players leaving', () => {
     expect(next.phase).toBe('over')
   })
 
-  it('moves on in picking when the picker leaves', () => {
+  it('starts play when the last player still picking leaves', () => {
     const { game, state } = newGame(['a', 'b', 'c'], { starts: 1 })
-    const next = game.onPlayerLeave!(state, 'a')!
-    expect(next.phase).toBe('start')
-    expect(next.order[next.current]).toBe('b')
+    let next = game.applyMove(state, 'a', { type: 'start', spot: 1 })
+    next = game.applyMove(next, 'b', { type: 'start', spot: 9 })
+    next = game.onPlayerLeave!(next, 'c')!
+    expect(next.phase).toBe('play')
+    expect(d(next, 'c').spot).toBeNull()
+    expect(next.order[next.current]).toBe('a')
+  })
+
+  it('skips players who left when moving on', () => {
+    const { game, state } = newGame(['a', 'b', 'c'])
+    place(state, { a: { r: 0, c: 0, p: 0 }, c: { r: 5, c: 5, p: 3 } })
+    d(state, 'a').hand = hand(STRAIGHT)
+    let next = game.onPlayerLeave!(state, 'b')!
+    next = game.applyMove(next, 'c', { type: 'skip' }, { isHost: true })
+    expect(next.order[next.current]).toBe('c')
+    expect(game.viewFor(next, 'a').drifters.map((x) => x.seat)).toEqual([1, 2, 3])
   })
 
   it('doesn’t let walk-ins join', () => {

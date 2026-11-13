@@ -3,6 +3,8 @@ import { PATTERNS, drift, pointKey, turn, wallSpots, type Board, type Segment, t
 
 export const MAX_PLAYERS = 12
 export const HAND_SIZE = 3
+/** Only the latest move is kept, to outline the newest piece. */
+export const LOG_LENGTH = 1
 
 export const LANTERN_COLORS: PlayerColor[] = [
   { name: 'Red', fill: '#e63946', text: '#ffffff' },
@@ -40,6 +42,8 @@ export interface Drifter {
   id: string
   color: number
   spot: Spot | null
+  /** While everyone picks a start: the wall spot this player wants, kept secret. */
+  pick: number | null
   trail: Segment[]
   hand: Piece[]
   /** Set once the lantern goes out, with the move it went out on. */
@@ -47,11 +51,17 @@ export interface Drifter {
   gone: boolean
 }
 
-export interface LastMove {
-  by: string
-  sq: number
+/** One thing that happened: a piece placed, or everyone's starting spots handed out. */
+export interface LogEntry {
+  /** Pieces placed so far, counting this one. 0 for the start. */
+  move: number
+  /** Who placed a piece, or null for the start. */
+  by: string | null
+  sq: number | null
   /** Who went out, and why. */
   outs: { id: string; why: OutReason }[]
+  /** At the start: players whose spot someone earlier in turn order also picked, so they start nearby. */
+  bumped: string[]
 }
 
 export interface DriftState {
@@ -61,25 +71,29 @@ export interface DriftState {
   phase: 'start' | 'play' | 'over'
   /** Player ids in turn order. */
   order: string[]
-  /** Index into `order` of whoever is choosing. */
+  /** Index into `order` of whoever is playing. */
   current: number
   /** Pieces placed so far. */
   moves: number
   turnEndsAt: number | null
   board: (Placed | null)[]
   drifters: Drifter[]
-  last: LastMove | null
+  log: LogEntry[]
   nextId: number
 }
 
 export interface DrifterView {
   id: string
+  /** Place in turn order, from 1. Shown on the lantern. */
+  seat: number
   color: number
   spot: Spot | null
   trail: Segment[]
   lit: boolean
   out: Drifter['out']
   pieces: number
+  /** While picking starts: whether they've picked. */
+  picked: boolean
   gone: boolean
 }
 
@@ -92,15 +106,17 @@ export interface DriftView {
   turnEndsAt: number | null
   board: (Placed | null)[]
   drifters: DrifterView[]
-  last: LastMove | null
+  log: LogEntry[]
   /** Your pieces, if you're playing and still lit. */
   hand: Piece[] | null
+  /** Your secret starting pick, while everyone picks. */
+  pick: number | null
 }
 
 export type DriftMove =
   | { type: 'start'; spot: number }
   | { type: 'place'; piece: number; turns: number }
-  /** Host only: plays for whoever is taking too long. */
+  /** Host only: plays for whoever is taking too long, or hands out starts to anyone still picking. */
   | { type: 'skip' }
 
 export type Random = () => number
@@ -108,12 +124,12 @@ export type Random = () => number
 const isLit = (d: Drifter) => !d.out && !d.gone
 const lit = (state: DriftState) => state.drifters.filter(isLit)
 const drifterOf = (state: DriftState, id: string | undefined) => state.drifters.find((d) => d.id === id)
-const currentId = (state: DriftState) => (state.phase === 'over' ? null : (state.order[state.current] ?? null))
+const currentId = (state: DriftState) => (state.phase === 'play' ? (state.order[state.current] ?? null) : null)
 
 export const boardPairs = (board: (Placed | null)[]): Board =>
   board.map((cell) => (cell ? turn(PATTERNS[cell.pattern]!, cell.turns) : null))
 
-/** Every opening on the wall that no lantern has picked. */
+/** Every opening on the wall that no lantern is on yet. */
 export function freeStarts(state: Pick<DriftState, 'size' | 'drifters'>) {
   const taken = new Set(state.drifters.filter((d) => d.spot).map((d) => pointKey(state.size, d.spot!)))
   return wallSpots(state.size)
@@ -156,43 +172,68 @@ function drawPiece(state: DriftState, random: Random): Piece {
   return { id: state.nextId++, pattern: Math.min(PATTERNS.length - 1, Math.floor(random() * PATTERNS.length)) }
 }
 
-function startTurn(state: DriftState) {
+function startClock(state: DriftState) {
   state.turnEndsAt = state.timer > 0 ? Date.now() + state.timer * 1000 : null
+}
+
+function addLog(state: DriftState, entry: LogEntry) {
+  state.log = [...state.log, entry].slice(-LOG_LENGTH)
+}
+
+function endGame(state: DriftState) {
+  state.phase = 'over'
+  state.turnEndsAt = null
 }
 
 /** Moves on to the next lit lantern after the current one, or ends the game. */
 function nextTurn(state: DriftState) {
-  if (state.phase === 'start') {
-    const waiting = state.order.findIndex((id) => {
-      const d = drifterOf(state, id)!
-      return !d.spot && !d.gone
-    })
-    if (waiting !== -1) {
-      state.current = waiting
-      return startTurn(state)
-    }
-    state.phase = 'play'
-    state.current = -1
-  }
-  if (lit(state).length <= 1) {
-    state.phase = 'over'
-    state.turnEndsAt = null
-    return
-  }
+  if (lit(state).length <= 1) return endGame(state)
   for (let step = 1; step <= state.order.length; step++) {
-    const index = (state.current + step + state.order.length) % state.order.length
+    const index = (state.current + step) % state.order.length
     if (isLit(drifterOf(state, state.order[index])!)) {
       state.current = index
-      return startTurn(state)
+      return startClock(state)
     }
   }
 }
 
-function pickStart(state: DriftState, playerId: string, index: number) {
-  const free = freeStarts(state).find((s) => s.index === index)
-  if (!free) throw new MoveError('Pick an open spot on the wall.')
-  drifterOf(state, playerId)!.spot = free.spot
+/** The free wall spot closest to this one, going either way round. Ties go clockwise. */
+function nearestFree(state: DriftState, index: number) {
+  const count = wallSpots(state.size).length
+  const free = new Set(freeStarts(state).map((s) => s.index))
+  for (let distance = 0; distance < count; distance++) {
+    for (const candidate of [index + distance, index - distance]) {
+      const wrapped = ((candidate % count) + count) % count
+      if (free.has(wrapped)) return wrapped
+    }
+  }
+  return null
+}
+
+/**
+ * Everyone has picked, or time is up: hand out starting spots in turn order.
+ * A spot someone earlier already has goes to the nearest free one instead.
+ */
+function settleStarts(state: DriftState, random: Random) {
+  const spots = wallSpots(state.size)
+  const bumped: string[] = []
+  for (const id of state.order) {
+    const d = drifterOf(state, id)!
+    if (d.gone) continue
+    const wanted = d.pick ?? Math.floor(random() * spots.length)
+    const given = nearestFree(state, wanted)!
+    if (d.pick !== null && given !== d.pick) bumped.push(id)
+    d.spot = spots[given]!
+    d.pick = null
+  }
+  addLog(state, { move: 0, by: null, sq: null, outs: [], bumped })
+  state.phase = 'play'
+  state.current = -1
   nextTurn(state)
+}
+
+function maybeSettleStarts(state: DriftState, random: Random) {
+  if (state.phase === 'start' && state.drifters.every((d) => d.gone || d.pick !== null)) settleStarts(state, random)
 }
 
 function place(state: DriftState, playerId: string, pieceId: number, turns: number, random: Random) {
@@ -206,7 +247,7 @@ function place(state: DriftState, playerId: string, pieceId: number, turns: numb
   state.moves++
   state.board[result.sq] = { pattern: piece.pattern, turns, by: playerId }
   me.hand = me.hand.filter((p) => p !== piece)
-  const outs: LastMove['outs'] = []
+  const outs: LogEntry['outs'] = []
   for (const [id, outcome] of result.outcomes) {
     const d = drifterOf(state, id)!
     d.trail.push(...outcome.trail)
@@ -217,17 +258,13 @@ function place(state: DriftState, playerId: string, pieceId: number, turns: numb
       outs.push({ id, why: outcome.out })
     }
   }
-  state.last = { by: playerId, sq: result.sq, outs }
+  addLog(state, { move: state.moves, by: playerId, sq: result.sq, outs, bumped: [] })
   if (isLit(me)) while (me.hand.length < HAND_SIZE) me.hand.push(drawPiece(state, random))
   nextTurn(state)
 }
 
 /** For a turn that ran out of time: a random move that keeps the lantern lit, if there is one. */
 function playFor(state: DriftState, playerId: string, random: Random) {
-  if (state.phase === 'start') {
-    const free = freeStarts(state)
-    return pickStart(state, playerId, free[Math.floor(random() * free.length)]!.index)
-  }
   const me = drifterOf(state, playerId)!
   const options = me.hand.flatMap((piece) => [0, 1, 2, 3].map((turns) => ({ piece, turns })))
   const safe = options.filter((o) => keepsMeLit(state, playerId, o.piece.pattern, o.turns))
@@ -298,18 +335,19 @@ export function makeDriftLines(random: Random = Math.random): Game<DriftState, D
           id,
           color: context?.colors?.[id] ?? i % LANTERN_COLORS.length,
           spot: null,
+          pick: null,
           trail: [],
           hand: [],
           out: null,
           gone: false,
         })),
-        last: null,
+        log: [],
         nextId: 1,
       }
       state.board = Array(state.size * state.size).fill(null)
       for (const d of state.drifters) for (let i = 0; i < HAND_SIZE; i++) d.hand.push(drawPiece(state, random))
       if (state.phase === 'play') spreadStarts(state, random)
-      startTurn(state)
+      startClock(state)
       return state
     },
 
@@ -318,29 +356,36 @@ export function makeDriftLines(random: Random = Math.random): Game<DriftState, D
       if (original.phase === 'over') throw new MoveError('The game is over.')
       const me = drifterOf(original, playerId)
       if (move.type === 'skip') {
-        if (!context?.isHost) throw new MoveError('Only the host can skip a turn.')
+        if (!context?.isHost) throw new MoveError('Only the host can skip ahead.')
         const state = structuredClone(original)
-        playFor(state, currentId(state)!, random)
+        if (state.phase === 'start') settleStarts(state, random)
+        else playFor(state, currentId(state)!, random)
         return state
       }
       if (!me || me.gone) throw new MoveError('You’re watching this game.')
       if (me.out) throw new MoveError('Your lantern is out.')
-      if (currentId(original) !== playerId) throw new MoveError('It’s not your turn.')
-      const state = structuredClone(original)
       switch (move.type) {
         case 'start': {
-          if (state.phase !== 'start') throw new MoveError('Everyone has a starting spot already.')
-          if (typeof move.spot !== 'number' || !Number.isInteger(move.spot)) throw new MoveError('Pick a spot on the wall.')
-          pickStart(state, playerId, move.spot)
+          if (original.phase !== 'start') throw new MoveError('Everyone has a starting spot already.')
+          const spot = move.spot
+          const count = wallSpots(original.size).length
+          if (typeof spot !== 'number' || !Number.isInteger(spot) || spot < 0 || spot >= count) {
+            throw new MoveError('Pick a spot on the wall.')
+          }
+          const state = structuredClone(original)
+          drifterOf(state, playerId)!.pick = spot
+          maybeSettleStarts(state, random)
           return state
         }
         case 'place': {
-          if (state.phase !== 'play') throw new MoveError('Wait until everyone has picked a spot.')
+          if (original.phase !== 'play') throw new MoveError('Wait until everyone has picked a spot.')
+          if (currentId(original) !== playerId) throw new MoveError('It’s not your turn.')
           const turns = move.turns
           if (typeof turns !== 'number' || !Number.isInteger(turns) || turns < 0 || turns > 3) {
             throw new MoveError('Turn the piece and try again.')
           }
           if (typeof move.piece !== 'number') throw new MoveError('Pick one of your pieces.')
+          const state = structuredClone(original)
           place(state, playerId, move.piece, turns, random)
           return state
         }
@@ -359,18 +404,21 @@ export function makeDriftLines(random: Random = Math.random): Game<DriftState, D
         moves: state.moves,
         turnEndsAt: state.turnEndsAt,
         board: state.board,
-        last: state.last,
+        log: state.log,
         drifters: state.drifters.map((d) => ({
           id: d.id,
+          seat: state.order.indexOf(d.id) + 1,
           color: d.color,
           spot: d.spot,
           trail: d.trail,
           lit: isLit(d),
           out: d.out,
           pieces: d.hand.length,
+          picked: d.pick !== null,
           gone: d.gone,
         })),
         hand: viewer && isLit(viewer) ? viewer.hand : null,
+        pick: viewer?.pick ?? null,
       }
     },
 
@@ -385,6 +433,7 @@ export function makeDriftLines(random: Random = Math.random): Game<DriftState, D
     },
 
     waitingOn(state) {
+      if (state.phase === 'start') return state.drifters.filter((d) => !d.gone && d.pick === null).map((d) => d.id)
       const id = currentId(state)
       return id ? [id] : []
     },
@@ -394,10 +443,10 @@ export function makeDriftLines(random: Random = Math.random): Game<DriftState, D
     },
 
     tick(original) {
-      const id = currentId(original)
-      if (!id) return original
+      if (original.phase === 'over') return original
       const state = structuredClone(original)
-      playFor(state, id, random)
+      if (state.phase === 'start') settleStarts(state, random)
+      else playFor(state, currentId(state)!, random)
       return state
     },
 
@@ -415,15 +464,16 @@ export function makeDriftLines(random: Random = Math.random): Game<DriftState, D
       const wasTurn = currentId(state) === playerId
       me.gone = true
       me.hand = []
+      me.pick = null
       if (!me.out) me.out = { move: state.moves, why: 'left' }
       if (state.drifters.every((d) => d.gone)) return null
       if (state.phase === 'over') return state
       if (lit(state).length <= 1) {
-        state.phase = 'over'
-        state.turnEndsAt = null
+        endGame(state)
         return state
       }
-      if (wasTurn) nextTurn(state)
+      if (state.phase === 'start') maybeSettleStarts(state, random)
+      else if (wasTurn) nextTurn(state)
       return state
     },
   }
