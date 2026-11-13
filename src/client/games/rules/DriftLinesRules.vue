@@ -5,7 +5,7 @@
   <ul>
     <li>Lanterns start on the wall around the board, either spread out at random or picked by the players.</li>
     <li>When players pick, everyone picks at once and in secret. If two pick the same spot, whoever is earlier in turn order gets it, and the other starts at the nearest free spot.</li>
-    <li>Each lantern shows its place in turn order.</li>
+    <li>Each lantern shows the first letter of its player’s name. Yours has a dark ring, and your route is thicker.</li>
     <li>You hold 3 channel pieces. Only you can see them.</li>
     <li>The board gets bigger with more players: 6 by 6 up to 4 players, 8 by 8 up to 8, and 10 by 10 up to 12.</li>
   </ul>

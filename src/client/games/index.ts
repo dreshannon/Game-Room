@@ -3,6 +3,7 @@ import ColorClues from './ColorClues.vue'
 import DialIn from './DialIn.vue'
 import DialInRules from './rules/DialInRules.vue'
 import DriftLines from './drift-lines/DriftLines.vue'
+import DriftLinesDemo from './drift-lines/DriftLinesDemo.vue'
 import DriftLinesRules from './rules/DriftLinesRules.vue'
 import LuckyStreak from './LuckyStreak.vue'
 import LuckyStreakRevengeRules from './rules/LuckyStreakRevengeRules.vue'
@@ -26,6 +27,8 @@ export interface GameView {
   component: Component
   /** Shown in the How to play box. */
   rules: Component
+  /** A practice version for the lobby, played on your own. Receives `you` and `players` as props. */
+  demo?: Component
   /** One line on the game's tile in the lobby. */
   tagline: string
   /** Tints the game's tile in the lobby. */
@@ -84,6 +87,7 @@ export const gameViews: Record<string, GameView> = {
   'drift-lines': {
     component: DriftLines,
     rules: DriftLinesRules,
+    demo: DriftLinesDemo,
     tagline: 'Lay channels, steer your lantern, keep it lit.',
     accent: '#2b6f8f',
   },

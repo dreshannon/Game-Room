@@ -82,6 +82,19 @@ const yourColor = computed(
 const colorHolder = (color: number) =>
   state.value?.players.find((player) => player.color === color && player.id !== state.value?.you) ?? null
 
+// Practice and readying up, while waiting in the lobby.
+const demo = computed(() => (selectedGame.value ? gameViews[selectedGame.value.id]?.demo : undefined))
+const lobbyRules = computed(() => (selectedGame.value ? gameViews[selectedGame.value.id]?.rules : undefined))
+const youReady = computed(() => !!state.value?.players.find((player) => player.id === state.value?.you)?.ready)
+/** Everyone the host is waiting on: connected players other than the host. */
+const guests = computed(() =>
+  (state.value?.players ?? []).filter((player) => player.connected && player.id !== state.value?.hostId),
+)
+const notReady = computed(() => guests.value.filter((player) => !player.ready))
+const listNames = (names: string[]) =>
+  names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+const toggleReady = () => send({ type: 'setReady', ready: !youReady.value })
+
 const isYourTurn = computed(() => {
   const game = state.value?.game
   return !!game && !game.result && !!state.value?.you && game.waitingOn.includes(state.value.you)
@@ -221,6 +234,7 @@ function endGame() {
               <template v-else>The host picks the game. Next up: <strong>{{ selectedGame?.name }}</strong></template>
             </p>
             <GamePicker
+              v-if="isHost"
               :games="games"
               :selected-id="state.selectedGameId"
               :can-pick="isHost"
@@ -339,6 +353,13 @@ function endGame() {
               >
                 Start game
               </button>
+              <p v-if="isHost && guests.length" class="ready-line" role="status">
+                <template v-if="notReady.length === 0">Everyone is ready.</template>
+                <template v-else>
+                  {{ guests.length - notReady.length }} of {{ guests.length }} ready. Waiting on
+                  {{ listNames(notReady.map((player) => player.name)) }}. You can start any time.
+                </template>
+              </p>
               <p class="muted">
                 <template v-if="canStart && !isHost">Waiting for the host to start…</template>
                 <template v-else-if="!canStart && selectedGame.seats">
@@ -355,6 +376,38 @@ function endGame() {
                   connected players. {{ connectedCount }} here now.
                 </template>
               </p>
+
+              <section class="get-ready">
+                <div class="ready-head">
+                  <h3>Get ready for {{ selectedGame.name }}</h3>
+                  <button
+                    v-if="!isHost"
+                    :class="{ primary: !youReady, 'is-ready': youReady }"
+                    :aria-pressed="youReady"
+                    @click="toggleReady"
+                  >
+                    {{ youReady ? '✓ Ready' : 'I’m ready' }}
+                  </button>
+                </div>
+                <p class="muted">
+                  <template v-if="demo">Try the controls below. It’s only practice.</template>
+                  <template v-else>Have a read of the rules.</template>
+                  <template v-if="!isHost"> Press Ready when you’re set, so the host knows.</template>
+                </p>
+                <component :is="demo" v-if="demo" :you="state.you" :players="state.players" />
+                <details v-if="lobbyRules" class="lobby-rules" :open="!demo">
+                  <summary>How to play {{ selectedGame.name }}</summary>
+                  <div class="lobby-rules-body"><component :is="lobbyRules" /></div>
+                </details>
+                <button
+                  v-if="!isHost && demo"
+                  :class="{ primary: !youReady, 'is-ready': youReady }"
+                  :aria-pressed="youReady"
+                  @click="toggleReady"
+                >
+                  {{ youReady ? '✓ Ready' : 'I’m ready' }}
+                </button>
+              </section>
             </template>
           </template>
         </section>
@@ -397,6 +450,7 @@ function endGame() {
               </button>
               <span v-if="player.id === state.hostId" class="tag">host</span>
               <span v-if="!player.connected" class="tag">away</span>
+              <span v-if="!state.game && player.ready" class="tag ready-tag">ready</span>
               <button
                 v-if="isHost && player.id !== state.you"
                 class="small-button"
@@ -428,7 +482,7 @@ function endGame() {
                 <span v-else-if="colorHolder(index)" aria-hidden="true">{{ Array.from(colorHolder(index)!.name)[0]?.toUpperCase() }}</span>
               </button>
             </div>
-            <p v-if="yourColor === null" class="muted small-note">Pick one, or you’ll get a free one when the game starts.</p>
+            <p v-if="yourColor === null" class="muted small-note">All the colors are taken for now.</p>
           </fieldset>
         </aside>
       </div>
@@ -512,6 +566,76 @@ function endGame() {
 
 .end-game {
   justify-self: end;
+}
+
+.ready-line {
+  font-weight: 600;
+}
+
+.get-ready {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+  width: 100%;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.get-ready > :deep(*) {
+  max-width: 100%;
+}
+
+.ready-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  width: 100%;
+}
+
+.ready-head h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.is-ready {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.lobby-rules {
+  width: 100%;
+}
+
+.lobby-rules summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lobby-rules-body {
+  padding-top: 0.6rem;
+}
+
+.lobby-rules-body :deep(h3) {
+  margin: 1rem 0 0.4rem;
+  font-size: 1rem;
+}
+
+.lobby-rules-body :deep(p),
+.lobby-rules-body :deep(ul),
+.lobby-rules-body :deep(ol) {
+  margin: 0 0 0.6rem;
+}
+
+.lobby-rules-body :deep(ul),
+.lobby-rules-body :deep(ol) {
+  padding-left: 1.25rem;
+}
+
+.ready-tag {
+  background: var(--ink);
+  color: var(--paper);
 }
 
 .seat-picker {

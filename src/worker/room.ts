@@ -27,6 +27,8 @@ interface Player {
   team: number | null
   /** The name of the color they picked, so it carries over to games with the same color. */
   color: string | null
+  /** Whether they've said they're ready for the next game. */
+  ready: boolean
 }
 
 interface ActiveGameRecord {
@@ -113,6 +115,8 @@ export class Room extends Server<Env> {
         return this.handleSetTeam(connection, player, message.team)
       case 'setColor':
         return this.handleSetColor(connection, player, message.color)
+      case 'setReady':
+        return this.handleSetReady(player, message.ready)
       case 'shuffleTeams':
         return this.handleShuffleTeams(connection, player)
       case 'pickPlayer':
@@ -157,12 +161,14 @@ export class Room extends Server<Env> {
         expiry: null,
         team: null,
         color: null,
+        ready: false,
       }
       this.players.set(player.id, player)
       this.playerByConnection.set(connection.id, player.id)
       this.hostId ??= player.id
     }
     this.seatWalkIn(player)
+    this.fillColors()
     this.broadcastState()
   }
 
@@ -214,6 +220,23 @@ export class Room extends Server<Env> {
       kept.add(color)
     }
     return Object.fromEntries(seats.map((seat) => [seat.id, Math.max(0, names.indexOf(seat.color ?? ''))]))
+  }
+
+  /** Gives a color to everyone who doesn't have one, when the game has colors. */
+  private fillColors() {
+    const palette = this.palette()
+    if (palette) this.assignColors([...this.players.keys()], palette)
+  }
+
+  private clearReady() {
+    for (const player of this.players.values()) player.ready = false
+  }
+
+  private handleSetReady(player: Player, ready: unknown) {
+    // Ready only means something in the lobby.
+    if (this.game) return
+    player.ready = ready === true
+    this.broadcastState()
   }
 
   /** Colors for the game being played, or otherwise the one picked in the lobby. */
@@ -273,9 +296,12 @@ export class Room extends Server<Env> {
     if (this.isGameInProgress()) return this.sendError(connection, 'Finish this game first.')
     const definition = typeof gameId === 'string' ? getGame(gameId) : undefined
     if (!definition) return this.sendError(connection, 'That game does not exist.')
+    // A different game means different rules to read, so everyone readies up again.
+    if (definition.id !== this.selectedGameId) this.clearReady()
     this.selectedGameId = definition.id
     this.gameOptions = defaultOptions(definition)
     this.game = null
+    this.fillColors()
     this.broadcastState()
   }
 
@@ -404,6 +430,7 @@ export class Room extends Server<Env> {
       playerIds,
       state: definition.setup(playerIds, this.gameOptions, { teams, colors }),
     }
+    this.clearReady()
     this.broadcastState()
   }
 
@@ -425,6 +452,8 @@ export class Room extends Server<Env> {
   private handleEndGame(connection: Connection, player: Player) {
     if (player.id !== this.hostId) return this.sendError(connection, 'Only the host can do that.')
     this.game = null
+    this.clearReady()
+    this.fillColors()
     this.broadcastState()
   }
 
@@ -489,12 +518,13 @@ export class Room extends Server<Env> {
       selectedGameId: this.selectedGameId,
       options: this.gameOptions,
       pickedIds: this.pickedIds,
-      players: [...this.players.values()].map(({ id, name, connectionId, team, color }) => ({
+      players: [...this.players.values()].map(({ id, name, connectionId, team, color, ready }) => ({
         id,
         name,
         connected: connectionId !== null,
         team,
         color: colorIndex(color),
+        ready,
       })),
       game:
         game && definition

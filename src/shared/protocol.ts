@@ -10,6 +10,8 @@ export type ClientMessage =
   | { type: 'setOption'; key: string; value: number }
   | { type: 'setTeam'; team: number }
   | { type: 'setColor'; color: number }
+  /** In the lobby: tells everyone you're ready for the game to start. */
+  | { type: 'setReady'; ready: boolean }
   | { type: 'shuffleTeams' }
   | { type: 'pickPlayer'; playerId: string; picked: boolean }
   | { type: 'start' }
@@ -26,6 +28,8 @@ export interface PublicPlayer {
   team: number | null
   /** Their color in games with player colors, as an index into the game's `playerColors`. */
   color: number | null
+  /** Whether they've said they're ready, in the lobby. */
+  ready: boolean
 }
 
 export interface ActiveGame {

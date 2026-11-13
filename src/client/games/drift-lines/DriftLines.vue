@@ -23,6 +23,8 @@ const span = computed(() => v.value.size * SQUARE + PAD * 2)
 /** Lanterns grow with the board so they stay easy to see when it's drawn smaller. */
 const lanternSize = computed(() => 4 + v.value.size * 2.2)
 const nameOf = (id: string) => props.players.find((p) => p.id === id)?.name ?? 'Someone'
+/** The first letter of a player's name, shown on their lantern. */
+const initialOf = (id: string) => Array.from(nameOf(id))[0]?.toUpperCase() ?? '?'
 const youOr = (id: string) => (id === props.you ? 'You' : nameOf(id))
 const swatchOf = (d: { color: number }) => LANTERN_COLORS[d.color % LANTERN_COLORS.length]!
 const colorOf = (d: { color: number }) => swatchOf(d).fill
@@ -160,6 +162,7 @@ watch(
 const trails = computed(() =>
   v.value.drifters.map((d) => ({
     id: d.id,
+    mine: d.id === props.you,
     color: colorOf(d),
     lit: d.lit || d.id in moving.value,
     paths: d.trail.map((s, i) => ({ d: segmentPath(s), fresh: i >= (freshFrom.value[d.id] ?? d.trail.length), i })),
@@ -173,11 +176,25 @@ const freshStyle = (id: string, i: number) =>
       }
     : {}
 const lanterns = computed(() =>
-  v.value.drifters.flatMap((d) => {
-    const at = moving.value[d.id] ?? restingXY(d)
-    if (!at) return []
-    return [{ d, at, glowing: d.lit || d.id in moving.value }]
-  }),
+  v.value.drifters
+    .flatMap((d) => {
+      const at = moving.value[d.id] ?? restingXY(d)
+      if (!at) return []
+      const mine = d.id === props.you
+      // Yours is bigger, and drawn last so it's never hidden under another.
+      return [{ d, at, mine, size: lanternSize.value * (mine ? 1.3 : 1), glowing: d.lit || d.id in moving.value }]
+    })
+    .sort((a, b) => Number(a.mine) - Number(b.mine)),
+)
+
+// A ring that closes in on your lantern, to help you find it: at the start, on your turn, or when asked.
+const locate = ref(0)
+const findMe = () => (locate.value += 1)
+watch(
+  () => [v.value.phase, myTurn.value] as const,
+  ([phase, mine], [oldPhase]) => {
+    if (phase !== 'over' && (mine || phase !== oldPhase)) findMe()
+  },
 )
 
 // ---- Your pieces ----
@@ -223,7 +240,9 @@ function turnToSafe(id: number) {
 watch(
   hand,
   (pieces) => {
-    if (!pieces.some((p) => p.id === selected.value)) selected.value = pieces[0]?.id ?? null
+    if (pieces.some((p) => p.id === selected.value)) return
+    selected.value = pieces[0]?.id ?? null
+    if (selected.value !== null) turnToSafe(selected.value)
   },
   { immediate: true },
 )
@@ -251,8 +270,9 @@ function rotate(by: number) {
   if (selected.value !== null) setTurns(selected.value, turnsFor(selected.value) + by)
 }
 
+/** Where your picked piece would take you. Shown between turns too, so you can plan. */
 const ghost = computed(() => {
-  if (!myTurn.value || v.value.phase !== 'play' || !selectedPiece.value) return null
+  if (v.value.phase !== 'play' || !selectedPiece.value) return null
   const piece = selectedPiece.value
   const turns = turnsFor(piece.id)
   const result = preview(asState.value, props.you, piece.pattern, turns)
@@ -272,6 +292,7 @@ const ghost = computed(() => {
     trail: (mine?.trail ?? []).map(segmentPath),
     out: mine?.out ?? null,
     others,
+    planning: !myTurn.value,
   }
 })
 const ghostLine = computed(() => {
@@ -280,6 +301,13 @@ const ghostLine = computed(() => {
   const knocked = g.others.filter((o) => o.out).map((o) => nameOf(o.id))
   const pushed = g.others.filter((o) => !o.out).map((o) => nameOf(o.id))
   const parts: string[] = []
+  if (g.planning) {
+    // Between turns it's only a plan, since the board can change before you play.
+    if (g.out === 'wall') parts.push('As things stand, this would put you out on the wall.')
+    else if (g.out === 'crash') parts.push('As things stand, this would crash you into another lantern.')
+    else parts.push('As things stand, this is safe.')
+    return parts.join(' ')
+  }
   if (g.out === 'wall') parts.push('This puts you out on the wall.')
   else if (g.out === 'crash') parts.push('This crashes you into another lantern.')
   else parts.push('Safe.')
@@ -287,7 +315,7 @@ const ghostLine = computed(() => {
   if (pushed.length) parts.push(`${listNames(pushed)} ${pushed.length === 1 ? 'drifts' : 'drift'} too.`)
   return parts.join(' ')
 })
-const blocked = computed(() => !!ghost.value?.out && anySafe.value)
+const blocked = computed(() => myTurn.value && !!ghost.value?.out && anySafe.value)
 const canPlace = computed(() => myTurn.value && !!selectedPiece.value && !blocked.value)
 
 function placePiece() {
@@ -305,7 +333,8 @@ const bumpedLine = computed(() => {
 const waitLine = computed(() => {
   if (myTurn.value) return ''
   const who = v.value.turn
-  return who ? `Waiting for ${nameOf(who)}. Line up your next piece.` : ''
+  if (!who) return ''
+  return `Waiting for ${nameOf(who)}. ${ghostLine.value}`
 })
 
 // ---- Picking a start, all at once and in secret ----
@@ -330,11 +359,16 @@ function stepStart(by: number) {
   startChoice.value = (((startChoice.value ?? 0) + by) % count + count) % count
 }
 function tapBoard(event: MouseEvent) {
-  if (!picking.value) return
   const svg = event.currentTarget as SVGSVGElement
   const box = svg.getBoundingClientRect()
   const x = ((event.clientX - box.left) / box.width) * span.value
   const y = ((event.clientY - box.top) / box.height) * span.value
+  if (!picking.value) {
+    // Tapping your piece on the board turns it.
+    const g = ghost.value
+    if (g && x >= g.x && x <= g.x + SQUARE && y >= g.y && y <= g.y + SQUARE) rotate(1)
+    return
+  }
   let best: number | null = null
   let bestDistance = Infinity
   for (const s of wall.value) {
@@ -424,6 +458,18 @@ const skipLabel = computed(() =>
     <div class="main">
       <header class="top">
         <p class="eyebrow">{{ statusLine }}</p>
+        <button v-if="me" class="you-chip" title="Show me my lantern" @click="findMe">
+          <span
+            class="seat-badge"
+            :style="{
+              background: me.lit ? colorOf(me) : 'transparent',
+              borderColor: colorOf(me),
+              color: me.lit ? swatchOf(me).text : colorOf(me),
+            }"
+            >{{ initialOf(me.id) }}</span
+          >
+          You’re {{ swatchOf(me).name.toLowerCase() }}
+        </button>
         <p v-if="secondsLeft !== null && v.phase !== 'over'" class="clock" :class="{ hurry }">{{ secondsLeft }}s</p>
       </header>
       <div class="timebar" :class="{ hidden: v.turnEndsAt === null || v.phase === 'over' }" aria-hidden="true">
@@ -432,7 +478,7 @@ const skipLabel = computed(() =>
 
       <svg
         class="board"
-        :class="{ picking }"
+        :class="{ picking, turnable: !!ghost }"
         :viewBox="`0 0 ${span} ${span}`"
         role="img"
         :aria-label="`Canal board, ${v.size} by ${v.size}`"
@@ -466,7 +512,18 @@ const skipLabel = computed(() =>
           class="facing"
         />
 
-        <g v-for="t in trails" :key="`t${t.id}`" :class="{ dim: !t.lit }">
+        <g v-for="t in trails" :key="`t${t.id}`" :class="{ dim: !t.lit, mine: t.mine }">
+          <template v-if="t.mine">
+            <path
+              v-for="s in t.paths"
+              :key="`c${s.i}`"
+              :d="s.d"
+              class="trail casing"
+              :class="{ fresh: s.fresh }"
+              :style="s.fresh ? freshStyle(t.id, s.i) : {}"
+              pathLength="1"
+            />
+          </template>
           <path
             v-for="s in t.paths"
             :key="s.i"
@@ -478,7 +535,7 @@ const skipLabel = computed(() =>
           />
         </g>
 
-        <g v-if="ghost" class="ghost">
+        <g v-if="ghost" class="ghost" :class="{ planning: ghost.planning }">
           <rect :x="ghost.x + 2" :y="ghost.y + 2" :width="SQUARE - 4" :height="SQUARE - 4" rx="8" class="face" />
           <path v-for="c in ghost.paths" :key="c.key" :d="c.d" class="water" />
           <g v-for="o in ghost.others" :key="`go${o.id}`">
@@ -532,24 +589,28 @@ const skipLabel = computed(() =>
           v-for="l in lanterns"
           :key="`l${l.d.id}`"
           class="lantern"
-          :class="{ out: !l.glowing, mine: l.d.id === you, current: l.d.id === v.turn }"
+          :class="{ out: !l.glowing, mine: l.mine, current: l.d.id === v.turn }"
           :transform="`translate(${l.at[0]} ${l.at[1]})`"
         >
-          <circle v-if="l.glowing" :r="lanternSize * 1.7" class="halo" :style="{ fill: colorOf(l.d) }" />
+          <circle v-if="l.glowing" :r="l.size * 1.7" class="halo" :style="{ fill: colorOf(l.d) }" />
+          <template v-if="l.mine">
+            <circle :key="locate" :r="l.size + 9" class="locate" />
+            <circle :r="l.size + 9" class="you-ring" />
+          </template>
           <circle
-            :r="lanternSize"
+            :r="l.size"
             class="body"
             :style="{ fill: l.glowing ? colorOf(l.d) : 'none', stroke: colorOf(l.d) }"
           />
           <text
-            :y="lanternSize * 0.36"
+            :y="l.size * 0.36"
             class="seat"
             :style="{
               fill: l.glowing ? swatchOf(l.d).text : colorOf(l.d),
-              fontSize: `${lanternSize * (l.d.seat >= 10 ? 0.85 : 1.05)}px`,
+              fontSize: `${l.size * 1.05}px`,
             }"
           >
-            {{ l.d.seat }}
+            {{ initialOf(l.d.id) }}
           </text>
         </g>
       </svg>
@@ -558,7 +619,7 @@ const skipLabel = computed(() =>
     <div class="side">
       <!-- Your pieces stay put between turns, so you can line up your next move. -->
       <section v-if="v.phase === 'play' && hand.length" class="panel controls">
-        <p class="label">{{ myTurn ? 'Your turn. Pick a piece and turn it.' : 'Your pieces' }}</p>
+        <p class="label">{{ myTurn ? 'Your turn. Pick a piece, turn it, then place it.' : 'Plan your next move' }}</p>
         <div class="hand">
           <button
             v-for="(p, i) in hand"
@@ -573,11 +634,16 @@ const skipLabel = computed(() =>
             <span v-if="noSafeTurn(p.id)" class="badge">No safe turn</span>
           </button>
         </div>
-        <div class="row actions">
-          <button aria-label="Turn left" title="Turn left (,)" @click="rotate(-1)">⟲</button>
-          <button aria-label="Turn right" title="Turn right (.)" @click="rotate(1)">⟳</button>
+        <div class="actions">
+          <button class="turn" title="Turn left (,)" :disabled="!selectedPiece" @click="rotate(-1)">
+            <span class="arrow" aria-hidden="true">⟲</span> Turn left
+          </button>
+          <button class="turn" title="Turn right (.)" :disabled="!selectedPiece" @click="rotate(1)">
+            Turn right <span class="arrow" aria-hidden="true">⟳</span>
+          </button>
           <button class="primary place" :disabled="!canPlace" @click="placePiece">Place</button>
         </div>
+        <p class="small muted">You can also tap your piece on the board to turn it.</p>
         <p class="ghost-line" :class="{ warn: myTurn && ghost?.out }" role="status">
           {{ bumpedLine }}
           <template v-if="myTurn">
@@ -596,10 +662,10 @@ const skipLabel = computed(() =>
           Tap the wall or step along it. Picks are secret. If someone earlier in turn order picks the same spot, you
           start at the nearest free one.
         </p>
-        <div class="row actions">
+        <div class="actions">
           <button aria-label="Previous spot" title="Previous spot (,)" @click="stepStart(-1)">◀</button>
           <button aria-label="Next spot" title="Next spot (.)" @click="stepStart(1)">▶</button>
-          <button class="primary" :disabled="startChoice === null || startChoice === v.pick" @click="sendStart">
+          <button class="primary place" :disabled="startChoice === null || startChoice === v.pick" @click="sendStart">
             {{ startButton }}
           </button>
         </div>
@@ -631,7 +697,7 @@ const skipLabel = computed(() =>
                 borderColor: colorOf(d),
                 color: d.lit ? swatchOf(d).text : colorOf(d),
               }"
-              >{{ d.seat }}</span
+              >{{ initialOf(d.id) }}</span
             >
             <span class="name">{{ youOr(d.id) }}</span>
             <span class="muted small">{{ rosterNote(d) }}</span>
@@ -725,8 +791,18 @@ const skipLabel = computed(() =>
   touch-action: manipulation;
 }
 
-.board.picking {
+.board.picking,
+.board.turnable {
   cursor: pointer;
+}
+
+.you-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.6rem 0.15rem 0.2rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
 }
 
 .measure {
@@ -783,6 +859,16 @@ const skipLabel = computed(() =>
   opacity: 0.35;
 }
 
+/* Your own route is thicker, with a dark edge, so it stands out from the rest. */
+.mine .trail {
+  stroke-width: 14;
+}
+
+.mine .trail.casing {
+  stroke: var(--ink);
+  stroke-width: 22;
+}
+
 .animate .trail.fresh {
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
@@ -803,6 +889,16 @@ const skipLabel = computed(() =>
 .ghost .face {
   stroke: var(--accent);
   stroke-width: 4;
+}
+
+/* Between turns the preview is only a plan, so it's fainter. */
+.ghost.planning {
+  opacity: 0.6;
+}
+
+.ghost.planning .face {
+  stroke: var(--muted);
+  stroke-dasharray: 10 8;
 }
 
 .ghost-trail {
@@ -860,8 +956,39 @@ const skipLabel = computed(() =>
 }
 
 .lantern.mine .body {
-  stroke: var(--ink) !important;
+  stroke: var(--surface) !important;
   stroke-width: 4;
+}
+
+.you-ring {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 6;
+}
+
+.locate {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 4;
+  vector-effect: non-scaling-stroke;
+  opacity: 0;
+}
+
+.animate .locate {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: locate 1.4s ease-out 2;
+}
+
+@keyframes locate {
+  from {
+    opacity: 0.9;
+    transform: scale(4);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1);
+  }
 }
 
 .lantern.out .body {
@@ -923,9 +1050,24 @@ const skipLabel = computed(() =>
   line-height: 1.3;
 }
 
-.actions button:not(.primary) {
-  min-width: 3rem;
-  font-size: 1.1rem;
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.actions .turn {
+  padding-inline: 0.5rem;
+  white-space: nowrap;
+}
+
+.actions .arrow {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.actions .place {
+  grid-column: 1 / -1;
 }
 
 .ghost-line {
