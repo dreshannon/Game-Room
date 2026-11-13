@@ -103,4 +103,28 @@ const marks = computed(() => {
   font-size: 0.7rem;
   color: var(--muted);
 }
+
+/* Smaller cards on phones, so the board and both hands fit on one screen. */
+@media (max-width: 40rem) {
+  .wind-card {
+    width: 4.6rem;
+    gap: 0.15rem;
+    padding: 0.35rem 0.3rem 0.3rem;
+  }
+
+  .grid {
+    width: 2.8rem;
+    gap: 1.5px;
+  }
+
+  .name {
+    font-size: 0.78rem;
+  }
+
+  .label {
+    font-size: 0.65rem;
+    line-height: 1.1;
+    text-align: center;
+  }
+}
 </style>

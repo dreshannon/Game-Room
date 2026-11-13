@@ -137,6 +137,8 @@ const lastMoveText = computed(() => {
 // before the board changes, then each card is played back from where it was.
 const root = ref<HTMLElement | null>(null)
 let before = new Map<string, { rect: DOMRect; flipped: boolean; drifting: boolean }>()
+/** A copy of the ship about to be sunk, so it can be shown going down after it's gone. */
+let sinking: SVGElement | null = null
 
 const measure = () =>
   new Map(
@@ -154,6 +156,11 @@ watch(
   () => `${props.view.game}:${props.view.turns}`,
   () => {
     before = canAnimate() ? measure() : new Map()
+    const to = props.view.lastMove?.sank ? props.view.lastMove.to : undefined
+    sinking =
+      to === undefined || !before.size
+        ? null
+        : ((root.value?.querySelector(`[data-square="${to}"] .ship`)?.cloneNode(true) as SVGElement | undefined) ?? null)
   },
   { flush: 'pre' },
 )
@@ -163,6 +170,7 @@ watch(
   () => {
     const last = props.view.lastMove
     if (!before.size || !last) return
+    animateShip(last.from, last.to)
     for (const card of root.value?.querySelectorAll<HTMLElement>('[data-wind]') ?? []) {
       const wind = card.dataset.wind!
       const old = before.get(wind)
@@ -178,13 +186,53 @@ watch(
           { transform: `translate(${dx}px, ${dy}px) rotate(${turned ? 180 : 0}deg)`, zIndex: 2 },
           { transform: 'none', zIndex: 2 },
         ],
-        { duration: 550, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
+        { duration: 550, easing: EASE },
       )
     }
     before = new Map()
   },
   { flush: 'post' },
 )
+
+const EASE = 'cubic-bezier(0.2, 0.8, 0.2, 1)'
+
+/** Glides the ship that moved from its old square, and sinks any ship it landed on. */
+function animateShip(from: number | undefined, to: number | undefined) {
+  const board = root.value?.querySelector<HTMLElement>('.board')
+  const start = board?.querySelector(`[data-square="${from}"]`)
+  const end = board?.querySelector(`[data-square="${to}"]`)
+  const ship = end?.querySelector('.ship')
+  if (!board || !start || !end || !ship) return
+  const a = start.getBoundingClientRect()
+  const b = end.getBoundingClientRect()
+
+  if (sinking) {
+    const area = board.getBoundingClientRect()
+    const ghost = sinking
+    ghost.classList.add('ghost')
+    Object.assign(ghost.style, {
+      left: `${b.left - area.left + b.width * 0.09}px`,
+      top: `${b.top - area.top + b.height * 0.09}px`,
+      width: `${b.width * 0.82}px`,
+      height: `${b.height * 0.82}px`,
+    })
+    board.append(ghost)
+    const fade = ghost.animate(
+      [
+        { opacity: 1, transform: 'none' },
+        { opacity: 0, transform: 'translateY(30%) rotate(-12deg) scale(0.8)' },
+      ],
+      { duration: 450, delay: 300, easing: 'ease-in', fill: 'both' },
+    )
+    fade.onfinish = fade.oncancel = () => ghost.remove()
+    sinking = null
+  }
+
+  ship.animate([{ transform: `translate(${a.left - b.left}px, ${a.top - b.top}px)` }, { transform: 'none' }], {
+    duration: 450,
+    easing: EASE,
+  })
+}
 
 const turnsLeft = computed(() => (props.view.drawAfter ? props.view.drawAfter - props.view.turns : null))
 
@@ -211,16 +259,17 @@ const isLast = (square: number) => props.view.lastMove?.from === square || props
 
     <p class="status" aria-live="polite">{{ status }}</p>
 
-    <div class="hand" :aria-label="`${seatName(top)}’s winds`">
-      <span class="who"><span class="swatch" :class="`fleet-${top}`" />{{ seatName(top) }}</span>
-      <WindCard v-for="wind in view.hands[top]" :key="wind" :wind="wind" :data-wind="wind" flipped disabled />
-    </div>
-
     <div class="table">
+      <div class="hand top-hand" :aria-label="`${seatName(top)}’s winds`">
+        <span class="who"><span class="swatch" :class="`fleet-${top}`" />{{ seatName(top) }}</span>
+        <WindCard v-for="wind in view.hands[top]" :key="wind" :wind="wind" :data-wind="wind" flipped disabled />
+      </div>
+
       <div class="board" role="grid" aria-label="The bay">
         <button
           v-for="square in order"
           :key="square"
+          :data-square="square"
           class="square"
           :class="{
             port: isPort(square),
@@ -258,19 +307,19 @@ const isLast = (square: number) => props.view.lastMove?.from === square || props
           disabled
         />
       </div>
-    </div>
 
-    <div class="hand" :aria-label="`${seatName(bottom)}’s winds`">
-      <span class="who"><span class="swatch" :class="`fleet-${bottom}`" />{{ seatName(bottom) }}</span>
-      <WindCard
-        v-for="wind in view.hands[bottom]"
-        :key="wind"
-        :wind="wind"
-        :data-wind="wind"
-        :selected="pickedWind === wind || (pendingTarget !== null && !!reach.get(pendingTarget)?.includes(wind))"
-        :disabled="!isYourTurn || (pendingTarget !== null && !reach.get(pendingTarget)?.includes(wind))"
-        @pick="clickWind(wind)"
-      />
+      <div class="hand bottom-hand" :aria-label="`${seatName(bottom)}’s winds`">
+        <span class="who"><span class="swatch" :class="`fleet-${bottom}`" />{{ seatName(bottom) }}</span>
+        <WindCard
+          v-for="wind in view.hands[bottom]"
+          :key="wind"
+          :wind="wind"
+          :data-wind="wind"
+          :selected="pickedWind === wind || (pendingTarget !== null && !!reach.get(pendingTarget)?.includes(wind))"
+          :disabled="!isYourTurn || (pendingTarget !== null && !reach.get(pendingTarget)?.includes(wind))"
+          @pick="clickWind(wind)"
+        />
+      </div>
     </div>
 
     <p v-if="lastMoveText" class="muted">{{ lastMoveText }}</p>
@@ -361,39 +410,76 @@ const isLast = (square: number) => props.view.lastMove?.from === square || props
   background: var(--ink);
 }
 
-/* The board sits in the middle column, with the drifting wind beside it on wide screens. */
+/*
+ * Wide screens: the board in the middle column, a hand above and below it, and the drifting
+ * wind beside it. Phones: the drifting wind sits next to your hand so everything fits.
+ */
 .table {
   display: grid;
   grid-template-columns: 1fr minmax(0, 21rem) 1fr;
+  grid-template-areas:
+    '. top .'
+    '. board drift'
+    '. bottom .';
   align-items: center;
   gap: 0.75rem;
   width: 100%;
 }
 
+.top-hand {
+  grid-area: top;
+}
+
+.bottom-hand {
+  grid-area: bottom;
+}
+
 .table .board {
-  grid-column: 2;
+  grid-area: board;
   width: 100%;
 }
 
-.table .drift {
-  grid-column: 3;
+.drift {
+  grid-area: drift;
   justify-self: start;
 }
 
 @media (max-width: 40rem) {
-  .table {
-    grid-template-columns: minmax(0, 21rem);
-    justify-content: center;
+  .wind-swap {
+    gap: 0.5rem;
   }
 
-  .table .board,
-  .table .drift {
-    grid-column: 1;
+  .table {
+    grid-template-columns: 1fr auto auto 1fr;
+    grid-template-areas:
+      'top top top top'
+      'board board board board'
+      '. bottom drift .';
+    gap: 0.5rem;
+  }
+
+  .table .board {
     justify-self: center;
+    width: min(100%, 21rem);
+  }
+
+  .hand {
+    gap: 0.35rem;
+  }
+
+  .who {
+    font-size: 0.75rem;
+  }
+
+  .drift {
+    align-self: end;
+    padding-left: 0.5rem;
+    border-left: 1px solid var(--line);
   }
 }
 
 .board {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 3px;
@@ -456,6 +542,7 @@ const isLast = (square: number) => props.view.lastMove?.from === square || props
 
 .ship {
   position: relative;
+  z-index: 1;
   width: 82%;
   height: 82%;
 }
@@ -484,5 +571,11 @@ const isLast = (square: number) => props.view.lastMove?.from === square || props
 .drift {
   display: grid;
   justify-items: center;
+}
+
+.ship.ghost {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
 }
 </style>
